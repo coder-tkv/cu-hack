@@ -222,9 +222,11 @@ export function ReportPage() {
           <span className={styles.summaryMeta}>Сессия {report.session_id}</span>
         </div>
         <p className={styles.summaryText}>{report.summary}</p>
-        {report.status === "partial" && (
+        {report.status === "partial" && coverage.incomplete_reasons.length > 0 && (
           <div className={styles.partial}>
-            <p className={styles.partialTitle}>Часть данных не удалось объяснить</p>
+            {/* Причины тут разные: и пропуски детекторов, и неполный разбор моделью.
+                Заголовок не должен валить всё на LLM — отчёт при этом рабочий. */}
+            <p className={styles.partialTitle}>Разбор неполный</p>
             <ul className={styles.plainList}>
               {coverage.incomplete_reasons.map((reason) => (
                 <li key={reason}>{reason}</li>
