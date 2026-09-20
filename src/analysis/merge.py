@@ -21,7 +21,10 @@ MERGE_BY_TYPE = ("token_hotspot", "spend_without_changes")
 # Эти находки по разным целям (разные файлы, разные указания) склеиваем, только
 # когда их много: на коротком логе три отдельные строки полезнее одной общей,
 # на суточной сессии 34 строки про 34 файла читать невозможно.
-MERGE_BY_TYPE_IF_MANY = {"file_churn": 4, "rewrite_loop": 4, "repeated_instruction": 4}
+MERGE_BY_TYPE_IF_MANY = {
+    "file_churn": 4, "rewrite_loop": 4, "repeated_instruction": 4,
+    "bash_instead_of_tool": 3, "missing_cli": 3,
+}
 
 MAX_STEP_IDS = 30  # столько ссылок держим в самой находке
 MAX_EPISODES = 50  # эпизоды несут свои доказательства, поэтому держим почти все
@@ -94,7 +97,7 @@ def _merge(group: list[dict]) -> dict:
         values = [e["metrics"].get(field) for e in episodes if isinstance(e["metrics"].get(field), int)]
         if values:
             metrics[field] = sum(values)
-    for field in ("edits", "writes", "shareOfSession", "billableTokens", "calls", "fileEdits"):
+    for field in ("edits", "writes", "occurrences", "shareOfSession", "billableTokens", "calls", "fileEdits"):
         values = [e["metrics"].get(field) for e in episodes if isinstance(e["metrics"].get(field), (int, float))]
         if values:
             metrics[field] = round(sum(values), 3)
@@ -154,6 +157,15 @@ def _title(lead: dict, episodes: int) -> str:
         n = m.get("writes") or 0
         return (f"{episodes} {files} перезаписаны целиком по нескольку раз "
                 f"(всего {n} {plural(n, ('перезапись', 'перезаписи', 'перезаписей'))})")
+    if t == "bash_instead_of_tool":
+        n = m.get("occurrences") or 0
+        tools = sorted({(e.get("evidence") or {}).get("tool") for e in lead.get("episodes") or []} - {None})
+        return (f"{n} {plural(n, ('обращение', 'обращения', 'обращений'))} через Bash к тому, "
+                f"для чего есть готовые инструменты ({', '.join(tools)})")
+    if t == "missing_cli":
+        bins = [(e.get("evidence") or {}).get("binary") for e in lead.get("episodes") or []]
+        bins = [b for b in bins if b]
+        return f"В окружении не хватает команд: {', '.join(bins[:6])}"
     if t == "repeated_instruction":
         return (f"Человеку приходилось повторять указания: {episodes} "
                 f"{plural(episodes, ('случай', 'случая', 'случаев'))} за сессию")

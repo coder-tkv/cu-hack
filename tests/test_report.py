@@ -12,11 +12,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from analysis import analyze_file, analyze_log  # noqa: E402
 from analysis.coverage import CLEAN, DIRECTIONS, FOUND, INSUFFICIENT  # noqa: E402
 from analysis.detectors import FINDING_TYPES  # noqa: E402
-from analysis.recommendations import CLAUDE_MD, RULE, SKILL, TEMPLATES  # noqa: E402
+from analysis.recommendations import CLAUDE_MD, RULE, SKILL, TEMPLATES, TOOL_SETUP  # noqa: E402
 from analysis.severity import BANDS  # noqa: E402
 from tests.test_hard import call_line, human_line, result_line  # noqa: E402
 
-ARTIFACT_TYPES = {CLAUDE_MD, RULE, SKILL}
+ARTIFACT_TYPES = {CLAUDE_MD, RULE, SKILL, TOOL_SETUP}
 
 
 def npm_loop(times: int = 4) -> str:
@@ -29,6 +29,11 @@ def npm_loop(times: int = 4) -> str:
 
 class TestCoverage(unittest.TestCase):
     """По каждому из шести направлений отчёт обязан сказать что-то определённое."""
+
+    def test_six_required_directions_plus_extras(self):
+        cov = analyze_log(npm_loop())["coverage"]
+        self.assertEqual(len([d for d in cov if d["required"]]), 6)
+        self.assertEqual(len(cov), len(DIRECTIONS))
 
     def test_six_directions_always_present(self):
         for log in (npm_loop(), "", '{"битый', human_line("привет", 0)):
@@ -202,7 +207,9 @@ class TestRealLogsReport(unittest.TestCase):
         for path in files:
             report = analyze_file(path)
             name = os.path.basename(path)[:8]
-            self.assertEqual(len(report["coverage"]), 6, name)
+            self.assertEqual(len(report["coverage"]), len(DIRECTIONS), name)
+            required = [d for d in report["coverage"] if d["required"]]
+            self.assertEqual(len(required), 6, f"{name}: шесть направлений кейса обязаны быть все")
             ids = {f["id"] for f in report["findings"]}
             for r in report["recommendations"]:
                 self.assertTrue(set(r["findingIds"]).issubset(ids), name)
@@ -302,3 +309,55 @@ class TestMergedFindings(unittest.TestCase):
         self.assertEqual(f["metrics"]["edits"], 24)
         for ep in f["episodes"]:
             self.assertTrue(ep["evidence"]["filePath"], "в эпизоде должен остаться конкретный файл")
+
+
+class TestToolRecommendations(unittest.TestCase):
+    """«Какие инструменты подключить» — требование кейса на странице 5."""
+
+    def test_missing_cli_lists_what_to_install(self):
+        lines = [human_line("собери отчёт", 0)]
+        for i in range(3):
+            lines += [call_line("Bash", {"command": "gh pr list"}, f"c{i}", i * 2 + 1),
+                      result_line(f"c{i}", "zsh: command not found: gh", i * 2 + 2, is_error=True)]
+        report = analyze_log("\n".join(lines))
+        rec = next(r for r in report["recommendations"] if r["findingType"] == "missing_cli")
+        self.assertEqual(rec["artifactType"], TOOL_SETUP)
+        self.assertIn("gh", rec["content"])
+        self.assertIn("GitHub CLI", rec["content"], "для известных команд подсказываем, что ставить")
+        self.assertEqual(rec["tools"], ["gh"])
+
+    def test_denied_calls_produce_settings_draft(self):
+        lines = [human_line("подними базу", 0)]
+        for i in range(2):
+            lines += [call_line("Bash", {"command": "docker compose up -d"}, f"c{i}", i * 2 + 1),
+                      result_line(f"c{i}", "The user doesn't want to proceed with this tool use.",
+                                  i * 2 + 2, is_error=True)]
+        report = analyze_log("\n".join(lines))
+        rec = next(r for r in report["recommendations"] if r["findingType"] == "tool_permission_denied")
+        self.assertEqual(rec["filename"], ".claude/settings.json")
+        self.assertIn("permissions", rec["content"])
+        self.assertIn("docker compose", rec["content"])
+        json.loads(rec["content"].split("```json")[1].split("```")[0])  # черновик обязан быть валидным JSON
+
+    def test_bash_instead_of_tool_names_unused_tools(self):
+        lines = [human_line("посмотри файлы", 0)]
+        for i in range(6):
+            lines += [call_line("Bash", {"command": f"cat /p/file{i}.ts"}, f"c{i}", i * 2 + 1),
+                      result_line(f"c{i}", "содержимое", i * 2 + 2)]
+        report = analyze_log("\n".join(lines))
+        f = next(x for x in report["findings"] if x["type"] == "bash_instead_of_tool")
+        self.assertEqual(f["metrics"]["tool"], "Read")
+        self.assertFalse(f["metrics"]["toolUsedInSession"])
+        rec = next(r for r in report["recommendations"] if r["findingType"] == "bash_instead_of_tool")
+        self.assertIn("Read", rec["action"])
+        self.assertIn("ни разу не вызывались", rec["action"])
+
+    def test_tool_setup_lands_in_generated_file(self):
+        lines = [human_line("собери отчёт", 0)]
+        for i in range(3):
+            lines += [call_line("Bash", {"command": "pandoc a.md -o a.pdf"}, f"c{i}", i * 2 + 1),
+                      result_line(f"c{i}", "zsh: command not found: pandoc", i * 2 + 2, is_error=True)]
+        report = analyze_log("\n".join(lines))
+        doc = report["artifacts"]["CLAUDE.generated.md"]
+        self.assertIn("Инструменты и доступы", doc)
+        self.assertIn("pandoc", doc)

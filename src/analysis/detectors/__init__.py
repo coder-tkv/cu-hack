@@ -14,6 +14,7 @@ from .failures import detect_failures
 from .human import detect_human_interventions
 from .repeated import detect_repeated_calls
 from .timing import detect_idle_and_slow
+from .tools import detect_tool_gaps
 from .tokens import detect_token_hotspots
 
 # Полный список типов находок. Новый тип обязан попасть сюда — иначе run_all
@@ -35,6 +36,9 @@ FINDING_TYPES = (
     "repeated_instruction",
     "idle_gaps",
     "slow_tool_calls",
+    "bash_instead_of_tool",
+    "missing_cli",
+    "tool_permission_denied",
 )
 
 DETECTORS = (
@@ -44,6 +48,7 @@ DETECTORS = (
     ("edits", detect_edit_churn),
     ("human", detect_human_interventions),
     ("timing", detect_idle_and_slow),
+    ("tools", detect_tool_gaps),
 )
 
 

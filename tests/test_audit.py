@@ -81,7 +81,17 @@ class Audit:
         if f["type"] in ("repeated_call", "similar_call") and f["metrics"].get("mutatingBetween"):
             self.t.assertNotIn("без изменений", f["title"],
                                f"{where}: заголовок обещает отсутствие правок, а метрика говорит обратное")
-        self.t.assertIn(str(f["episodeCount"]), f["title"], f"{where}: в заголовке не видно числа эпизодов")
+        # Заголовок склейки обязан честно показывать её состав: либо число эпизодов,
+        # либо перечисление того, что склеено (инструменты, команды).
+        enumerated = {"bash_instead_of_tool": "tool", "missing_cli": "binary"}
+        field = enumerated.get(f["type"])
+        if field:
+            values = {ep["evidence"].get(field) for ep in episodes if ep["evidence"].get(field)}
+            for v in values:
+                self.t.assertIn(str(v), f["title"], f"{where}: {v} склеено, но в заголовке его нет")
+        else:
+            self.t.assertIn(str(f["episodeCount"]), f["title"],
+                            f"{where}: в заголовке не видно числа эпизодов")
 
     # --- повторы -------------------------------------------------------
     def _repeated_call(self, f, where):
@@ -276,6 +286,39 @@ class Audit:
             self.t.assertIsNotNone(result, f"{where}: у долгого вызова нет результата")
             self.t.assertGreaterEqual(result["ts"] - call["ts"], 60_000, f"{where}: вызов быстрее минуты")
             self.t.assertEqual(w["seconds"], round((result["ts"] - call["ts"]) / 1000), f"{where}: врёт длительность")
+
+    # --- инструменты ---------------------------------------------------
+    def _bash_instead_of_tool(self, f, where):
+        import re
+
+        from analysis.detectors.tools import BASH_SUBSTITUTES
+
+        pattern = next((p for label, p, _ in BASH_SUBSTITUTES if label == f["evidence"]["category"]), None)
+        self.t.assertIsNotNone(pattern, f"{where}: неизвестная категория")
+        for ex in f["evidence"]["examples"]:
+            s = self.by_id[ex["stepId"]]
+            self.t.assertEqual(s.get("tool"), "Bash", f"{where}: ссылка не на Bash")
+            cmd = (s.get("args") or {}).get("command") or ""
+            self.t.assertTrue(pattern.search(cmd), f"{where}: команда не подходит под категорию: {cmd[:60]}")
+        used = any(s.get("tool") == f["evidence"]["tool"] for s in self.steps if s.get("kind") == "tool_call")
+        self.t.assertEqual(used, f["evidence"]["toolUsedInSession"], f"{where}: врёт про доступность инструмента")
+
+    def _missing_cli(self, f, where):
+        from analysis.detectors.tools import MISSING_CLI
+
+        binary = f["evidence"]["binary"]
+        for sid in f["evidence"]["resultStepIds"]:
+            s = self.by_id[sid]
+            found = [m.group(1) for m in MISSING_CLI.finditer(s.get("text") or "")]
+            self.t.assertIn(binary, found, f"{where}: в шаге {sid} нет «command not found: {binary}»")
+
+    def _tool_permission_denied(self, f, where):
+        from analysis.detectors.tools import DENIED
+
+        for sid in f["evidence"]["resultStepIds"]:
+            s = self.by_id[sid]
+            self.t.assertEqual(s["kind"], "tool_result", f"{where}: ссылка не на результат вызова")
+            self.t.assertTrue(DENIED.search(s.get("text") or ""), f"{where}: в шаге {sid} нет отказа")
 
     def _result_of(self, call: dict) -> dict | None:
         for s in self.steps:

@@ -32,6 +32,7 @@ DIRECT_EVIDENCE = {
     "repeated_call", "retry_loop", "repeated_error", "edit_revert",
     "interruptions", "file_churn", "rewrite_loop", "repeated_instruction",
     "human_corrections", "high_failure_rate", "spend_without_changes", "similar_call",
+    "bash_instead_of_tool", "missing_cli", "tool_permission_denied",
 }
 
 
@@ -98,6 +99,17 @@ def rules_for(f: dict) -> list[str]:
         rules.append("интервал мог уйти на ожидание человека или выполнение команды")
     elif t == "slow_tool_calls":
         rules.append(f"вызовов дольше минуты: {m.get('slowCalls')}")
+    elif t == "bash_instead_of_tool":
+        rules.append(f"обращений через Bash вместо {m.get('tool')}: {m.get('occurrences')}")
+        rules.append(f"{m.get('tool')} в сессии использовался" if m.get("toolUsedInSession")
+                     else f"{m.get('tool')} в сессии не вызывался ни разу")
+    elif t == "missing_cli":
+        rules.append(f"команда «{m.get('binary')}» не найдена {m.get('occurrences')} {_times(m.get('occurrences') or 0)}")
+        rules.append("это нехватка инструмента в окружении, а не ошибка рассуждения")
+    elif t == "tool_permission_denied":
+        rules.append(f"отклонено вызовов: {m.get('denials')}")
+        if m.get("tools"):
+            rules.append("инструменты: " + ", ".join(m["tools"][:4]))
 
     return rules
 
@@ -129,7 +141,9 @@ def classify(f: dict) -> dict:
     # перепахивание файла, разворот человеком.
     elif t in ("retry_loop", "repeated_error", "edit_revert", "high_failure_rate",
                "human_corrections", "interruptions", "repeated_instruction",
-               "spend_without_changes"):
+               "spend_without_changes", "tool_permission_denied", "missing_cli"):
+        band = BAND_MEDIUM
+    elif t == "bash_instead_of_tool" and (m.get("occurrences") or 0) >= 20:
         band = BAND_MEDIUM
     elif t == "repeated_call" and (m.get("repeats") or 0) >= 3 and m.get("mutatingBetween") == 0:
         band = BAND_MEDIUM

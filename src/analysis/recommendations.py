@@ -11,11 +11,29 @@
 
 from __future__ import annotations
 
+import json
+
 from .detectors.util import snippet
 
 CLAUDE_MD = "claude_md_patch"
 RULE = "rule"
 SKILL = "skill"
+TOOL_SETUP = "tool_setup"   # что подключить, установить или разрешить
+
+# Чем обычно закрывают отсутствующую команду. Чего нет в списке — оставляем как есть,
+# не выдумывая инструмент за пользователя.
+KNOWN_CLI = {
+    "gh": "GitHub CLI (`brew install gh`) или MCP-сервер GitHub",
+    "timeout": "coreutils (`brew install coreutils`, команда станет `gtimeout`)",
+    "docker": "Docker Desktop или colima",
+    "pandoc": "`brew install pandoc`",
+    "jq": "`brew install jq`",
+    "uv": "`brew install uv`",
+    "pdftotext": "poppler (`brew install poppler`)",
+    "mutool": "mupdf-tools (`brew install mupdf-tools`)",
+    "qpdf": "`brew install qpdf`",
+    "rg": "ripgrep (`brew install ripgrep`) — или встроенный инструмент Grep",
+}
 
 # Находки, из которых имеет смысл собрать черновик скилла: они все про то,
 # как агент запускает команды проекта.
@@ -219,6 +237,41 @@ TEMPLATES: dict[str, dict] = {
             "сделано и что следующий шаг, чтобы не начинать с перечитывания."
         ),
     },
+    "bash_instead_of_tool": {
+        "artifactType": CLAUDE_MD,
+        "title": "Пользоваться готовыми инструментами вместо Bash",
+        "action": "Читай файлы через Read, ищи через Grep и Glob, пиши через Write — Bash оставь для команд.",
+        "rationale": "Агент делал через Bash то, для чего в сессии есть отдельные инструменты.",
+        "verify": "В следующей сессии чтение и запись файлов не должны идти через cat, echo и sed.",
+        "rule": (
+            "## Инструменты вместо shell\n\n"
+            "- файл прочитать — `Read`, а не `cat`/`head`/`tail`;\n"
+            "- найти по содержимому — `Grep`, а не `grep`/`rg`;\n"
+            "- найти файлы — `Glob`, а не `find`;\n"
+            "- создать или переписать файл — `Write`, точечно изменить — `Edit`, "
+            "а не `echo >` и не `sed -i`.\n\n"
+            "Bash нужен для команд: тесты, сборка, git, запуск сервисов. Для работы с файлами "
+            "инструменты дешевле по токенам и показывают структуру, которую shell теряет."
+        ),
+    },
+    "missing_cli": {
+        "artifactType": TOOL_SETUP,
+        "filename": "tools-to-connect.md",
+        "title": "Подключить инструменты, которых не хватает в окружении",
+        "action": "Установите отсутствующие команды или подключите MCP-сервер, который делает то же.",
+        "rationale": "Агент вызывал команды, которых нет в системе, и шаги уходили в ошибку.",
+        "verify": "В следующей сессии ошибок «command not found» быть не должно.",
+        "rule": "## Инструменты, которых не хватало\n",
+    },
+    "tool_permission_denied": {
+        "artifactType": TOOL_SETUP,
+        "filename": ".claude/settings.json",
+        "title": "Разрешить инструменты, которые агенту нужны по задаче",
+        "action": "Добавьте нужные вызовы в permissions.allow, чтобы агент не тратил шаги на отклонённые попытки.",
+        "rationale": "Часть вызовов была отклонена по разрешениям.",
+        "verify": "В следующей сессии отклонённых по разрешениям вызовов быть не должно.",
+        "rule": "## Разрешения\n",
+    },
     "api_errors": {
         "artifactType": RULE,
         "title": "Учесть сбои API при оценке сессии",
@@ -231,6 +284,75 @@ TEMPLATES: dict[str, dict] = {
             "исключайте их из оценки поведения, но учитывайте в потерянном времени."
         ),
     },
+}
+
+
+def _evidences(f: dict) -> list[dict]:
+    """Доказательства находки: своей или всех её эпизодов, если она склеена."""
+    if f.get("episodes"):
+        return [e.get("evidence") or {} for e in f["episodes"]]
+    return [f.get("evidence") or {}]
+
+
+def _enrich_missing_cli(rec: dict, group: list[dict]) -> None:
+    binaries = []
+    for f in group:
+        for ev in _evidences(f):
+            b = ev.get("binary")
+            if b and b not in binaries:
+                binaries.append(b)
+    lines = ["## Инструменты, которых не хватало", ""]
+    for b in binaries:
+        hint = KNOWN_CLI.get(b, "проверьте, нужен ли он вообще, и чем его заменить")
+        lines.append(f"- `{b}` — {hint}")
+    lines += ["", "_Список собран по ошибкам «command not found» в логе сессии._"]
+    rec["content"] = "\n".join(lines) + "\n"
+    rec["tools"] = binaries
+
+
+def _enrich_denied(rec: dict, group: list[dict]) -> None:
+    prefixes, tools = [], []
+    for f in group:
+        for ev in _evidences(f):
+            for t in ev.get("tools") or []:
+                if t not in tools:
+                    tools.append(t)
+            for cmd in ev.get("commands") or []:
+                if not isinstance(cmd, str):
+                    continue
+                head = " ".join(cmd.split()[:2])
+                if head and head not in prefixes:
+                    prefixes.append(head)
+    allow = [f"Bash({p}:*)" for p in prefixes[:6]] or [t for t in tools[:6]]
+    snippet_json = json.dumps({"permissions": {"allow": allow}}, ensure_ascii=False, indent=2)
+    rec["content"] = (
+        "## Разрешения\n\n"
+        "Черновик для `.claude/settings.json` — проверьте шаблоны перед тем, как разрешать:\n\n"
+        f"```json\n{snippet_json}\n```\n\n"
+        "_Собрано по вызовам, которые были отклонены в логе сессии._\n"
+    )
+    rec["tools"] = tools
+
+
+def _enrich_bash(rec: dict, group: list[dict]) -> None:
+    missing = []
+    for f in group:
+        for ev in _evidences(f):
+            if ev.get("tool") and not ev.get("toolUsedInSession"):
+                missing.append(ev["tool"])
+    if missing:
+        rec["action"] += (
+            " Проверьте, подключены ли инструменты: "
+            + ", ".join(sorted(set(missing)))
+            + " — в сессии они ни разу не вызывались."
+        )
+    rec["tools"] = sorted({ev.get("tool") for f in group for ev in _evidences(f) if ev.get("tool")})
+
+
+ENRICHERS = {
+    "missing_cli": _enrich_missing_cli,
+    "tool_permission_denied": _enrich_denied,
+    "bash_instead_of_tool": _enrich_bash,
 }
 
 
@@ -264,13 +386,15 @@ def build_recommendations(findings: list[dict]) -> list[dict]:
         if not group:
             continue
         tpl = TEMPLATES[ftype]
-        recs.append({
+        rec = {
             "id": f"r{len(recs) + 1}",
             "findingId": group[0].get("id"),          # основная находка
             "findingIds": [f.get("id") for f in group],
             "findingType": ftype,
             "artifactType": tpl["artifactType"],
-            "filename": "CLAUDE.md" if tpl["artifactType"] == CLAUDE_MD else "review-notes.md",
+            "filename": tpl.get(
+                "filename", "CLAUDE.md" if tpl["artifactType"] == CLAUDE_MD else "review-notes.md"
+            ),
             "title": tpl["title"],
             "action": tpl["action"],
             "rationale": tpl["rationale"] + f" Затронуто эпизодов: {len(group)}.",
@@ -278,7 +402,11 @@ def build_recommendations(findings: list[dict]) -> list[dict]:
             "content": tpl["rule"],
             "examples": _examples(group),
             "source": "code",
-        })
+        }
+        enrich = ENRICHERS.get(ftype)
+        if enrich:
+            enrich(rec, group)
+        recs.append(rec)
 
     skill = _skill_draft(by_type)
     if skill:
@@ -365,6 +493,11 @@ def build_claude_md(recommendations: list[dict], meta: dict | None = None) -> st
         lines.append("Правил для CLAUDE.md по этой сессии не предлагается.")
     for r in patches:
         lines += [r["content"], "", f"_Основание: {r['rationale']} Как проверить: {r['verify']}_", ""]
+    setups = [r for r in recommendations if r["artifactType"] == TOOL_SETUP]
+    if setups:
+        lines += ["---", "", "## Инструменты и доступы", ""]
+        for r in setups:
+            lines += [f"**{r['title']}** (`{r['filename']}`)", "", r["content"], ""]
     if skills:
         lines += ["---", "", "## Отдельным файлом предлагается черновик скилла", ""]
         for r in skills:

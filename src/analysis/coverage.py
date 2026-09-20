@@ -13,6 +13,8 @@ FOUND = "found"
 CLEAN = "clean"
 INSUFFICIENT = "insufficient_data"
 
+# Шесть направлений из кейса плюс одно сверх него: инструменты и доступы.
+# Поле required отмечает те шесть, которые обязаны быть в отчёте.
 DIRECTIONS = (
     {"id": "repeats", "title": "Повторяющиеся вызовы инструментов",
      "detectors": ("repeated",), "checks": ("toolCalls",),
@@ -32,6 +34,9 @@ DIRECTIONS = (
     {"id": "timing", "title": "Интервалы между шагами",
      "detectors": ("timing",), "checks": ("stepsWithTime",),
      "unit": "шагов со временем"},
+    {"id": "tools", "title": "Инструменты и доступы", "required": False,
+     "detectors": ("tools",), "checks": ("toolCalls",),
+     "unit": "вызовов инструментов"},
 )
 
 
@@ -63,6 +68,7 @@ def build_coverage(steps: list[dict], findings: list[dict], warnings: list[str] 
         out.append({
             "direction": d["id"],
             "title": d["title"],
+            "required": d.get("required", True),
             "status": status,
             "findings": len(own),
             "findingIds": [f["id"] for f in own],
