@@ -1,0 +1,28 @@
+.title {
+  margin: 0;
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+}
+
+.subtitle {
+  margin: var(--space-10) 0 var(--space-24);
+  font-size: var(--font-size-subtitle);
+  color: var(--color-text-secondary);
+}
+
+.row {
+  display: flex;
+  gap: var(--space-8);
+  font-size: var(--font-size-small);
+  color: var(--color-text-muted);
+}
+
+.value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--color-text);
+}
+
+.actions {
+  margin-top: var(--space-24);
+}

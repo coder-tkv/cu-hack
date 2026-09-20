@@ -1,0 +1,74 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  border: 0;
+  border-radius: var(--radius-control);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-tight);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+  white-space: nowrap;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+}
+
+/* Основная синяя кнопка («Начать анализ», «Далее»). */
+.primary {
+  background: var(--color-primary);
+  color: var(--color-text);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.primary:disabled {
+  background: var(--color-primary-disabled);
+  color: var(--color-text-disabled);
+}
+
+/* Светлая кнопка внутри зоны загрузки («Выбрать файл»). */
+.soft {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.soft:hover:not(:disabled) {
+  background: var(--color-primary-soft-hover);
+}
+
+.medium {
+  height: var(--control-height-button);
+  min-width: 170px;
+  padding: 0 var(--space-24);
+  font-size: var(--font-size-button);
+}
+
+.large {
+  height: var(--control-height-button-lg);
+  min-width: 200px;
+  padding: 0 var(--space-24);
+  font-size: var(--font-size-button-lg);
+}
+
+.spinner {
+  animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2s;
+  }
+}

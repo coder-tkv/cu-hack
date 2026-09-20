@@ -1,0 +1,49 @@
+.title {
+  margin: 0 0 25px;
+  font-size: var(--font-size-title-lg);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  text-align: center;
+  color: var(--color-text);
+}
+
+.selectWrap {
+  position: relative;
+  width: 589px;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.select {
+  width: 100%;
+  height: var(--control-height-select);
+  padding: 0 60px 0 var(--control-padding-x);
+  background: var(--color-field);
+  border: 0;
+  border-radius: var(--radius-control);
+  color: var(--color-text);
+  font-size: var(--font-size-field);
+  appearance: none;
+  cursor: pointer;
+}
+
+.select option {
+  background: var(--color-field);
+  color: var(--color-text);
+}
+
+.chevron {
+  position: absolute;
+  top: 50%;
+  right: 21px;
+  transform: translateY(-50%);
+  color: var(--color-text);
+  pointer-events: none;
+}
+
+.actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+}
+

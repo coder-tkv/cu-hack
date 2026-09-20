@@ -1,0 +1,234 @@
+.title {
+  margin: 0;
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+}
+
+.subtitle {
+  margin: var(--space-10) 0 0;
+  font-size: var(--font-size-subtitle);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-tight);
+  color: var(--color-text-secondary);
+}
+
+/* --- Зона загрузки ------------------------------------------------------ */
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: var(--dropzone-height);
+  margin-top: var(--space-28);
+  padding: var(--space-20);
+  border: var(--border-width-dashed) dashed var(--color-border-dashed);
+  border-radius: var(--radius-dropzone);
+  background: transparent;
+  text-align: center;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.dropzoneActive {
+  border-color: var(--color-primary);
+  background: rgba(82, 116, 255, 0.08);
+}
+
+.dropIcon {
+  color: var(--color-text);
+}
+
+.dropTitle {
+  margin: var(--space-20) 0 0;
+  font-size: var(--font-size-body);
+  color: var(--color-text);
+}
+
+.dropHint {
+  margin: var(--space-4) 0 0;
+  font-size: var(--font-size-body);
+  color: var(--color-text-muted);
+}
+
+.dropButton {
+  margin-top: var(--space-16);
+}
+
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- Выбранный файл ----------------------------------------------------- */
+.file {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8);
+  margin-top: var(--space-12);
+  font-size: var(--font-size-small);
+}
+
+.fileName {
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileSize {
+  color: var(--color-text-muted);
+  flex: 0 0 auto;
+}
+
+.fileReset {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  text-decoration: underline;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.fileReset:hover {
+  color: var(--color-text);
+}
+
+/* --- Где найти лог ------------------------------------------------------ */
+.section {
+  margin-top: var(--space-28);
+}
+
+.label {
+  display: block;
+  margin: 0 0 var(--space-12);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+}
+
+.field {
+  width: 100%;
+  height: var(--control-height-field);
+  padding: 0 var(--control-padding-x);
+  background: var(--color-field);
+  border: 0;
+  border-radius: var(--radius-control);
+  color: var(--color-text-placeholder);
+  font-size: var(--font-size-field);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.field::placeholder {
+  color: var(--color-text-placeholder);
+}
+
+.fieldHint {
+  margin: var(--space-4) 0 0;
+  font-size: var(--font-size-small);
+  color: var(--color-text-muted);
+}
+
+/* --- Опции -------------------------------------------------------------- */
+.option {
+  display: flex;
+  gap: var(--space-12);
+  margin-top: var(--space-20);
+  cursor: pointer;
+}
+
+.checkbox {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.optionTitle {
+  display: block;
+  font-size: var(--font-size-body);
+  color: var(--color-text);
+}
+
+.optionHint {
+  display: block;
+  margin-top: var(--space-4);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-base);
+  color: var(--color-text-muted);
+}
+
+.notice {
+  margin-top: var(--space-12);
+  padding: var(--space-8) var(--space-16);
+  border-radius: var(--radius-control);
+  background: rgba(82, 116, 255, 0.1);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-base);
+  color: var(--color-text-secondary);
+}
+
+.warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-8);
+  margin-top: var(--space-12);
+  padding: var(--space-12) var(--space-16);
+  border-radius: var(--radius-control);
+  background: var(--color-danger-bg);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-base);
+  color: var(--color-text-secondary);
+}
+
+.warningIcon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--color-danger);
+}
+
+.error {
+  composes: warning;
+  color: var(--color-danger);
+}
+
+/* --- Низ карточки ------------------------------------------------------- */
+.footer {
+  margin-top: auto;
+  padding-top: var(--space-16);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-12);
+}
+
+.footerNote {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
+}
