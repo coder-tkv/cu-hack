@@ -4,6 +4,7 @@ from .census import census
 from .coverage import build_coverage
 from .kpi import compute_kpi
 from .parser import parse_file, parse_log, session_timing
+from .presentation import decorate, rule_snippet, summary
 from .recommendations import build_claude_md, build_recommendations
 from .detectors import run_all
 
@@ -27,8 +28,12 @@ def _finish(parsed: dict) -> dict:
     # Рекомендации собирает код: если LLM-этап недоступен, отчёт всё равно
     # отвечает на «что поменять к следующей сессии».
     recommendations = build_recommendations(findings)
+    decorate(findings)  # категория карточки, источник объяснения, число доказательств
+    for r in recommendations:
+        r["ruleSnippet"] = rule_snippet(r)
     return {
         "meta": meta,
+        "summary": summary(findings),
         "kpi": compute_kpi(steps),
         "census": census(steps),
         "coverage": build_coverage(steps, findings, warnings),
@@ -41,6 +46,7 @@ def _finish(parsed: dict) -> dict:
 
 __all__ = [
     "analyze_log",
+    "summary",
     "build_coverage",
     "build_recommendations",
     "build_claude_md",

@@ -430,3 +430,59 @@ class TestFactsAndCandidates(unittest.TestCase):
         f.update({"detector": "repeated", "evidenceStrength": "direct", "limitations": [], "fact": "3 раза"})
         candidates, _ = to_candidates([f])
         self.assertEqual(candidates[0]["evidence_step_ids"], f["stepIds"])
+
+
+class TestCardFields(unittest.TestCase):
+    """Поля, из которых фронт собирает карточку находки по макету."""
+
+    def test_every_type_has_category_and_headline(self):
+        from analysis.presentation import CATEGORY, HEADLINE, NOT_AGENT_BEHAVIOUR
+
+        self.assertEqual(sorted(set(FINDING_TYPES) - set(CATEGORY)), [])
+        # сбои среды в заголовок «Агент …» не попадают намеренно
+        self.assertEqual(sorted(set(FINDING_TYPES) - set(HEADLINE) - NOT_AGENT_BEHAVIOUR), [])
+        self.assertTrue(NOT_AGENT_BEHAVIOUR.isdisjoint(HEADLINE))
+
+    def test_card_fields_present(self):
+        for f in analyze_log(npm_loop())["findings"]:
+            self.assertTrue(f["categoryTitle"], f"{f['type']}: нет заголовка карточки")
+            self.assertTrue(f["category"])
+            self.assertEqual(f["evidenceSteps"], len(f["stepIds"]))
+            self.assertEqual(f["explanationSource"], "rule_based",
+                             "объяснение сейчас от кода; llm ставит ML, когда объяснит")
+
+    def test_summary_counts_match_findings(self):
+        report = analyze_log(npm_loop())
+        s = report["summary"]
+        self.assertEqual(s["total"], len(report["findings"]))
+        self.assertEqual(sum(s["byBand"].values()), len(report["findings"]))
+        self.assertTrue(s["headline"].startswith("Агент "))
+
+    def test_environment_failures_do_not_reach_the_headline(self):
+        lines = [json.dumps({"type": "assistant", "subtype": "api_error",
+                             "timestamp": f"2026-09-20T10:00:0{i}.000Z",
+                             "message": {"id": f"e{i}", "role": "assistant", "model": "claude-opus-5",
+                                         "content": [{"type": "text", "text": "API Error: 529"}]}})
+                 for i in range(3)]
+        s = analyze_log("\n".join(lines))["summary"]
+        self.assertEqual(s["total"], 1)
+        self.assertNotIn("Агент", s["headline"], "сбой API — не поведение агента")
+
+    def test_summary_when_nothing_found(self):
+        log = "\n".join([human_line("прочитай файл", 0),
+                         call_line("Read", {"file_path": "/p/a.ts"}, "c0", 1),
+                         result_line("c0", "export const a = 1", 2)])
+        s = analyze_log(log)["summary"]
+        self.assertEqual(s["total"], 0)
+        self.assertIn("не найдено", s["headline"])
+
+    def test_rule_snippet_fits_the_card(self):
+        for r in analyze_log(npm_loop())["recommendations"]:
+            self.assertTrue(r["ruleSnippet"])
+            self.assertLessEqual(len(r["ruleSnippet"]), 230)
+            self.assertNotIn("#", r["ruleSnippet"], "заголовки markdown в рамку карточки не идут")
+
+    def test_assessment_is_not_invented_by_code(self):
+        """inefficient / reasonable / uncertain ставит модель, не детектор."""
+        for f in analyze_log(npm_loop())["findings"]:
+            self.assertNotIn("assessment", f)
