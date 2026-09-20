@@ -109,7 +109,8 @@ class TestHostileInput(unittest.TestCase):
         r = self._ok("dup-tool-ids", log)
         results = [s for s in r["steps"] if s["kind"] == "tool_result"]
         self.assertEqual(len(results), 1)
-        self.assertIsNotNone(results[0]["resultOf"])
+        self.assertIsNone(results[0]["resultOf"], "при двух вызовах с одним ID нельзя угадывать владельца результата")
+        self.assertTrue(any("неоднозначна" in w for w in r["meta"]["warnings"]))
 
     def test_args_are_not_dict(self):
         log = "\n".join([

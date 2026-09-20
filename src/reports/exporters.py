@@ -39,7 +39,8 @@ def render_report_md(report: Report) -> str:
 
     lines += ["", "## Находки", ""]
     if not report.findings:
-        lines.append("Значимых проблем не найдено в пределах доступных данных.")
+        lines.append("Данных недостаточно для вывода об эффективности." if report.status.value == "insufficient_data"
+                     else "Находок нет в пределах доступных данных; это не доказательство эффективности.")
     for f in report.findings:
         lines += [
             f"### {f.rank + 1}. {f.title}",

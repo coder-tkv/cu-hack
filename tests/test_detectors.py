@@ -1,7 +1,7 @@
 """Тесты детекторов. Логи собираем из тех же JSONL-строк, что и настоящие,
 чтобы заодно проверять связку «парсер -> детектор»."""
 
-import glob
+from tests.corpus import real_logs
 import json
 import os
 import sys
@@ -316,15 +316,13 @@ class TestRealLogs(unittest.TestCase):
     """Главный тест: незнакомый настоящий лог не должен ронять разбор."""
 
     def setUp(self):
-        self.files = sorted(glob.glob(os.path.expanduser("~/.claude/projects/**/*.jsonl"), recursive=True))
+        self.files = real_logs()
         if not self.files:
             self.skipTest("нет настоящих логов на этой машине")
 
     def test_every_real_log_analyzed(self):
-        for f in self.files:
-            if os.path.getsize(f) > 20_000_000:
-                continue
-            r = analyze_file(f)
+        for f, text in self.files:
+            r = analyze_log(text)
             self.assertEqual(r["meta"]["format"], "claude-code", f)
             valid = {s["id"] for s in r["steps"]}
             for finding in r["findings"]:
@@ -333,9 +331,7 @@ class TestRealLogs(unittest.TestCase):
                 self.assertTrue(finding["explanation"])
 
     def test_truncated_real_log(self):
-        f = max((x for x in self.files if os.path.getsize(x) < 5_000_000), key=os.path.getsize)
-        with open(f, encoding="utf-8", errors="replace") as fh:
-            raw = fh.read()
+        _, raw = max((x for x in self.files if len(x[1]) < 5_000_000), key=lambda x: len(x[1]))
         r = analyze_log(raw[: len(raw) // 2])
         self.assertIsInstance(r["findings"], list)
 

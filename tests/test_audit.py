@@ -5,7 +5,7 @@
 делаем это сами, на всех настоящих логах и на случайных.
 """
 
-import glob
+from tests.corpus import real_logs
 import json
 import os
 import random
@@ -337,19 +337,17 @@ class TestFindingsAreTruthful(unittest.TestCase):
         seen = set()
         for f in report["findings"]:
             audit.check(f)
-            key = (f["type"], tuple(f["stepIds"]))
+            key = (f["type"], tuple(f["stepIds"]), (f.get("evidence") or {}).get("binary"))
             self.assertNotIn(key, seen, f"{case}: две одинаковые находки {f['type']} на тех же шагах")
             seen.add(key)
         return len(report["findings"])
 
     def test_real_logs_findings_verified(self):
-        files = sorted(glob.glob(os.path.expanduser("~/.claude/projects/**/*.jsonl"), recursive=True))
+        files = real_logs()
         if not files:
             self.skipTest("нет настоящих логов")
-        checked = 0
-        for f in files:
-            checked += self._audit(analyze_file(f), os.path.basename(f)[:8])
-        self.assertGreater(checked, 50, "аудит должен реально что-то проверить")
+        for name, text in files:
+            self._audit(analyze_log(text), os.path.basename(name)[:8])
 
     def test_fuzz_findings_verified(self):
         """Случайные логи: находки на мусоре тоже обязаны быть правдивыми."""

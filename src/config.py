@@ -13,7 +13,7 @@ LOG_DEFAULT_FORMAT = (
 
 class RunConfig(BaseModel):
     host: str = "0.0.0.0"
-    port: int = 8000
+    port: int = 8080
 
 
 class LoggingConfig(BaseModel):

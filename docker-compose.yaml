@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: postgres
     ports:
       # 5432 на хосте часто занят другим проектом, поэтому наружу отдаём 5433
-      - "5433:5432"
+      - "127.0.0.1:${DB_PORT:-5433}:5432"
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}" ]
       interval: 5s
@@ -20,8 +20,7 @@ services:
   backend:
     build:
       context: .
-    image: backend
-    container_name: backend
+    image: cu-hack-backend
     depends_on:
       db:
         condition: service_healthy
@@ -29,8 +28,15 @@ services:
       DB__URL: "postgresql+asyncpg://postgres:postgres@db:5432/postgres"
       DB__ECHO: 0
       STORAGE__DATA_DIR: "/app/data"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4.1-mini-2025-04-14}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:${API_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     volumes:
       - app_data:/app/data
 

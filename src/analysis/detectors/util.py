@@ -86,7 +86,7 @@ def has_identity(step: dict) -> bool:
 def group_key(step: dict) -> str:
     """Ключ группировки повторов. Сабагент — отдельный исполнитель: его вызовы
     нельзя складывать в одну серию с вызовами главного потока."""
-    return ("sub|" if step.get("sidechain") else "") + args_key(step)
+    return str(step.get("scope", "")) + ("sub|" if step.get("sidechain") else "") + args_key(step)
 
 
 def is_compact_boundary(step: dict) -> bool:

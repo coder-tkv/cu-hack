@@ -39,7 +39,7 @@ async def create_session(
     db: DbSession,
     file: Annotated[UploadFile, File(description="JSONL-транскрипт Claude Code")],
     format: Annotated[LogFormat, Form()] = LogFormat.claude_code,
-    llm_enabled: Annotated[bool, Form()] = True,
+    llm_enabled: Annotated[bool, Form()] = False,
 ) -> SessionCreated:
     session_id = f"s_{uuid.uuid4().hex[:12]}"
     analysis_id = f"a_{uuid.uuid4().hex[:12]}"

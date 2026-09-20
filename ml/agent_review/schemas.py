@@ -24,7 +24,7 @@ class ObservedAlternative(StrictModel):
 
 class Candidate(StrictModel):
     candidate_id: str = Field(min_length=1, max_length=200)
-    kind: Literal["explicit_tool_error", "repeated_tool_call", "read_many_files"]
+    kind: Literal["explicit_tool_error", "repeated_tool_call", "read_many_files", "detector_observation"]
     priority: Literal["high", "medium", "low"] = "low"
     task_context: str | None = Field(default=None, max_length=6000)
     facts: list[Fact] = Field(min_length=1, max_length=30)
@@ -65,7 +65,7 @@ class Citation(StrictModel):
     step_id: str
     quote: str
 
-Advice = Literal["none", "inspect_failure", "change_approach", "narrow_read_scope", "reuse_observed_tool"]
+Advice = Literal["none", "inspect_failure", "change_approach", "narrow_read_scope", "reuse_observed_tool", "inspect_observation"]
 
 class ModelDecision(StrictModel):
     # No unrestricted prose: the model cannot invent a problem, cause or utility.

@@ -9,6 +9,7 @@ kind "other", отсутствующее поле -> None. Все проблем
 from __future__ import annotations
 
 import json
+import hashlib
 from typing import Any, Iterable
 
 MAX_TEXT = 4000  # столько символов текста храним в шаге
@@ -217,7 +218,9 @@ class Parser:
         self.warnings: list[str] = []
         self.stats = {"lines": 0, "blank": 0, "badJson": 0, "claudeCodeLines": 0}
         self._seen_usage_msg_ids: set[str] = set()  # защита от двойного счёта usage
-        self._tool_use_to_step: dict[str, int] = {}
+        self._tool_use_to_step: dict[tuple[str, str], int | None] = {}
+        self._calls_by_tool_id: dict[str, list[dict]] = {}
+        self._seen_records: set[str] = set()
         self._line_no = 0
         self._meta = {
             "sessionIds": set(),
@@ -252,6 +255,9 @@ class Parser:
             "text": None,
             "usage": None,
             "uuid": obj.get("uuid") if isinstance(obj.get("uuid"), str) else None,
+            "parentUuid": obj.get("parentUuid") if isinstance(obj.get("parentUuid"), str) else None,
+            "agentId": obj.get("agentId") if isinstance(obj.get("agentId"), str) else None,
+            "scope": self._scope(obj),
             "raw": obj.get("type") if isinstance(obj.get("type"), str) else None,
             "sidechain": bool(obj.get("isSidechain")),
         }
@@ -278,6 +284,12 @@ class Parser:
             self.stats["badJson"] += 1
             self.warn(f"строка {line_no}: ожидался объект, пришло {type(obj).__name__}")
             return
+
+        if isinstance(obj.get("uuid"), str):
+            identity = hashlib.sha256(trimmed.encode()).hexdigest()
+            if identity in self._seen_records:
+                return
+            self._seen_records.add(identity)
 
         if _looks_like_claude_code(obj):
             self.stats["claudeCodeLines"] += 1
@@ -311,6 +323,23 @@ class Parser:
         if isinstance(msg, dict) and isinstance(msg.get("model"), str):
             m["models"].add(msg["model"])
 
+    @staticmethod
+    def _scope(obj: dict) -> str:
+        return json.dumps([obj.get("sessionId"), obj.get("agentId"), bool(obj.get("isSidechain"))], sort_keys=True)
+
+    def _find_call(self, result: dict) -> int | None:
+        key = (result["scope"], result["toolUseId"])
+        if key in self._tool_use_to_step:
+            return self._tool_use_to_step[key]
+        session, agent, sidechain = json.loads(result["scope"])
+        matches = []
+        for call in self._calls_by_tool_id.get(result["toolUseId"], []):
+            other_session, other_agent, other_sidechain = json.loads(call["scope"])
+            if (agent == other_agent and sidechain == other_sidechain
+                    and (session is None or other_session is None or session == other_session)):
+                matches.append(call["id"])
+        return matches[0] if len(matches) == 1 else None
+
     def _add_assistant(self, line_no: int, obj: dict) -> None:
         msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
         msg_id = msg.get("id") if isinstance(msg.get("id"), str) else None
@@ -332,19 +361,24 @@ class Parser:
             blocks = []
 
         made: list[dict] = []
-        for b in blocks:
+        for block_index, b in enumerate(blocks):
             if not isinstance(b, dict):
                 continue
             btype = b.get("type")
             if btype == "tool_use":
                 s = self._base(line_no, obj)
                 s["kind"] = KIND_TOOL_CALL
+                s["blockIndex"] = block_index
                 s["tool"] = b.get("name") if isinstance(b.get("name"), str) else None
                 s["args"] = _shrink(b.get("input"))
                 s["toolUseId"] = b.get("id") if isinstance(b.get("id"), str) else None
                 self._push(s)
                 if s["toolUseId"]:
-                    self._tool_use_to_step[s["toolUseId"]] = s["id"]
+                    key = (s["scope"], s["toolUseId"])
+                    if key in self._tool_use_to_step:
+                        self.warn(f"строка {line_no}: повторный tool_use.id, связь с результатом неоднозначна")
+                    self._tool_use_to_step[key] = None if key in self._tool_use_to_step else s["id"]
+                    self._calls_by_tool_id.setdefault(s["toolUseId"], []).append(s)
                 made.append(s)
             elif btype in ("text", "thinking"):
                 t = b.get("text") if isinstance(b.get("text"), str) else b.get("thinking")
@@ -352,6 +386,7 @@ class Parser:
                     continue
                 s = self._base(line_no, obj)
                 s["kind"] = KIND_OTHER if btype == "thinking" else KIND_ASSISTANT_TEXT
+                s["blockIndex"] = block_index
                 if btype == "thinking":
                     s["raw"] = "thinking"
                 s["text"] = _truncate(t, MAX_TEXT)
@@ -385,15 +420,16 @@ class Parser:
             blocks = []
 
         made = 0
-        for b in blocks:
+        for block_index, b in enumerate(blocks):
             if not isinstance(b, dict):
                 continue
             btype = b.get("type")
             if btype == "tool_result":
                 s = self._base(line_no, obj)
                 s["kind"] = KIND_TOOL_RESULT
+                s["blockIndex"] = block_index
                 s["toolUseId"] = b.get("tool_use_id") if isinstance(b.get("tool_use_id"), str) else None
-                s["resultOf"] = self._tool_use_to_step.get(s["toolUseId"]) if s["toolUseId"] else None
+                s["resultOf"] = self._find_call(s) if s["toolUseId"] else None
                 if s["resultOf"]:
                     call = self.steps[s["resultOf"] - 1]
                     s["tool"] = call.get("tool")
@@ -401,9 +437,10 @@ class Parser:
                 body_text = body if isinstance(body, str) else (_text_of_blocks(body) if isinstance(body, list) else "")
                 s["text"] = _truncate(body_text, MAX_TEXT)
                 s["textLen"] = len(body_text)
-                s["isError"] = bool(b.get("is_error")) or bool(
-                    tur and (tur.get("interrupted") is True or tur.get("is_error") is True)
-                )
+                explicit = b.get("is_error")
+                s["isError"] = explicit if isinstance(explicit, bool) else None
+                if tur and (tur.get("interrupted") is True or tur.get("is_error") is True):
+                    s["isError"] = True
                 if tur:
                     s["result"] = _shrink_result(tur)
                 self._push(s)
@@ -413,6 +450,7 @@ class Parser:
                 cls = classify_human_text(t)
                 s = self._base(line_no, obj)
                 s["kind"] = KIND_HUMAN
+                s["blockIndex"] = block_index
                 s["text"] = _truncate(t, MAX_TEXT)
                 s["textLen"] = len(t)
                 s["synthetic"] = bool(cls["synthetic"] or obj.get("isMeta"))
@@ -484,12 +522,20 @@ def parse_log(text: Any) -> dict:
     return p.finish()
 
 
-def parse_file(path: str) -> dict:
+def parse_file(path: str, max_line_bytes: int = 5 * 1024 * 1024) -> dict:
     """Построчное чтение: логи бывают под 100 МБ."""
     p = Parser()
-    with open(path, "r", encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            p.line(line.rstrip("\n"))
+    with open(path, "rb") as fh:
+        while line := fh.readline(max_line_bytes + 1):
+            if len(line) > max_line_bytes:
+                while line and not line.endswith(b"\n"):
+                    line = fh.readline(max_line_bytes + 1)
+                p._line_no += 1
+                p.stats["lines"] += 1
+                p.stats["badJson"] += 1
+                p.warn(f"строка {p._line_no}: превышен лимит размера, строка пропущена")
+                continue
+            p.line(line.decode("utf-8", errors="replace").rstrip("\n"))
     return p.finish()
 
 

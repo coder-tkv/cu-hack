@@ -99,8 +99,8 @@ def detect_tool_gaps(steps: list[dict]) -> list[dict]:
     for s in steps:
         if s.get("kind") != "tool_result":
             continue
-        for m in MISSING_CLI.finditer(s.get("text") or ""):
-            missing[m.group(1)].append(s)
+        for binary in dict.fromkeys(m.group(1) for m in MISSING_CLI.finditer(s.get("text") or "")):
+            missing[binary].append(s)
     for binary, group in missing.items():
         if len(group) < MIN_MISSING:
             continue
@@ -109,8 +109,7 @@ def detect_tool_gaps(steps: list[dict]) -> list[dict]:
                 "missing_cli",
                 severity=min(0.6, 0.35 + len(group) * 0.02),
                 title=(
-                    f"Команда «{binary}» не найдена в системе, вызвана {len(group)} "
-                    f"{plural(len(group), ('раз', 'раза', 'раз'))}"
+                    f"Команда «{binary}» не найдена: сообщение в {len(group)} результатах инструментов"
                 ),
                 step_ids=[s["id"] for s in group][:12],
                 metrics={"binary": binary, "occurrences": len(group)},

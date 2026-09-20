@@ -34,6 +34,8 @@ assessment:
 [TRUNCATED] или [REDACTED...]. Не выдумывай ID и цитаты.
 
 advice:
+- inspect_observation: для detector_observation; это сигнал детектора, а не
+  доказанная неэффективность. Оцени как uncertain или reasonable по контексту;
 - none: если действия reasonable или нет обоснованного совета;
 - inspect_failure: для explicit_tool_error или repeated_tool_call;
 - change_approach: для repeated_tool_call; обязательно при inefficient;

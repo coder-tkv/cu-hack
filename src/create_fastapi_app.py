@@ -24,9 +24,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if restored:
         log.warning("Переведено в interrupted: %s анализов", restored)
 
-    yield
-    # shutdown
-    await db_helper.dispose()
+    try:
+        yield
+    finally:
+        from jobs.runner import shutdown_tasks
+        await shutdown_tasks()
+        await db_helper.dispose()
 
 
 def create_app() -> FastAPI:
@@ -40,7 +43,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
-        allow_credentials=True,
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )

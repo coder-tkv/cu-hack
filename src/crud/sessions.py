@@ -65,12 +65,14 @@ async def save_steps(db: AsyncSession, steps: list[Step]) -> int:
         }
         for s in steps
     ]
-    stmt = insert(StepModel).values(values)
-    stmt = stmt.on_conflict_do_update(
-        index_elements=[StepModel.id],
-        set_={"payload": stmt.excluded.payload, "ordinal": stmt.excluded.ordinal},
-    )
-    await db.execute(stmt)
+    # asyncpg has a parameter limit; thousands of steps need bounded batches.
+    for start in range(0, len(values), 500):
+        stmt = insert(StepModel).values(values[start:start + 500])
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[StepModel.id],
+            set_={key: getattr(stmt.excluded, key) for key in values[0] if key != "id"},
+        )
+        await db.execute(stmt)
     await db.commit()
     return len(values)
 

@@ -76,6 +76,9 @@ class Report(BaseModel):
         default_factory=list, description="Имена из ARTIFACT_ALLOWLIST"
     )
     created_at: datetime | None = None
+    directions: list[dict] = Field(default_factory=list, description="Покрытие направлений детектора")
+    analysis_usage: dict[str, int] = Field(default_factory=dict, description="Токены нашего ML-разбора")
+    ml_details: dict | None = Field(default=None, description="Проверенный ML-отчёт, включая сжатие и пропуски")
 
 
 # --- Ответы API ------------------------------------------------------------

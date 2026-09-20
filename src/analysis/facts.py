@@ -86,7 +86,7 @@ def fact_text(f: dict) -> str:
         return (f"Через Bash выполнено {m.get('occurrences')} операций вида «{e.get('category')}», "
                 f"для которых в сессии есть инструмент {m.get('tool')}.{tail}")
     if t == "missing_cli":
-        return f"Команда «{m.get('binary')}» не найдена в системе, вызвана {m.get('occurrences')} раз.{tail}"
+        return f"Сообщение об отсутствии команды «{m.get('binary')}» встречается в {m.get('occurrences')} результатах инструментов.{tail}"
     if t == "tool_permission_denied":
         return f"Отклонено по разрешениям вызовов: {m.get('denials')}. Инструменты: {', '.join(m.get('tools') or []) or '—'}."
     return f.get("title") or ""

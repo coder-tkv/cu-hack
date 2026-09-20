@@ -58,6 +58,8 @@ class Step(BaseModel):
     )
 
     usage_ref: str | None = Field(default=None, description="UsageRecord.request_id")
+    usage: dict | None = Field(default=None, description="Наблюдаемый расход запроса исходного агента")
+    result_metadata: dict | None = Field(default=None, description="Сохранённые поля результата и пометки об усечении")
     warnings: list[str] = Field(default_factory=list)
 
 

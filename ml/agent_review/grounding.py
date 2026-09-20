@@ -41,6 +41,7 @@ def validate_decision(candidate: Candidate, decision: ModelDecision) -> None:
         "explicit_tool_error": {"none", "inspect_failure"},
         "repeated_tool_call": {"none", "change_approach", "inspect_failure"},
         "read_many_files": {"none", "narrow_read_scope", "reuse_observed_tool"},
+        "detector_observation": {"none", "inspect_observation"},
     }
     if decision.advice not in allowed[candidate.kind]:
         raise GroundingError("advice_not_applicable")
@@ -60,6 +61,9 @@ def render_judgment(candidate: Candidate, decision: ModelDecision) -> Judgment:
     validate_decision(candidate, decision)
     facts = {f.fact_id: f for f in candidate.facts}
     action = verification = rule = None
+    if decision.advice == "inspect_observation":
+        action = "Проверить указанные шаги и условия задачи; определить, было ли действие необходимо и можно ли упростить его с сохранением результата."
+        verification = "Сопоставить исходный и изменённый способ на той же задаче по корректности, полноте и числу обращений."
     if decision.advice == "inspect_failure":
         action = "Проверить причину указанной ошибки по результату инструмента перед повторным запуском."
         verification = "Убедиться, что диагностический шаг объясняет ошибку; сама ошибка не доказывает плохую работу агента."

@@ -40,7 +40,7 @@ def census(steps: list[dict]) -> dict:
             if s.get("tool") in MUTATING_TOOLS:
                 file_edits += 1
             r = results_by_call.get(s["id"])
-            if r is None:
+            if r is None or r.get("isError") is None:
                 calls_unknown += 1
             elif r.get("isError"):
                 calls_error += 1

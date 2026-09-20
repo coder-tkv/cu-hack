@@ -121,7 +121,7 @@ async def fail_analysis(db: AsyncSession, analysis_id: str, error: str) -> None:
 
 async def mark_interrupted(db: AsyncSession) -> int:
     """На старте сервиса: зависшие running-стадии -> interrupted."""
-    running = [s.value for s in RUNNING_STATUSES]
+    running = [AnalysisStatus.queued.value, *[s.value for s in RUNNING_STATUSES]]
     stmt = select(AnalysisModel.id).where(AnalysisModel.status.in_(running))
     ids = list((await db.execute(stmt)).scalars())
     if not ids:

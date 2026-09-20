@@ -21,7 +21,6 @@ __all__ = (
     "EvidenceStrengthT",
     "ExplanationSourceT",
     "Finding",
-    "Judgment",
     "Recommendation",
     "ARTIFACT_ALLOWLIST",
     "AnalysisState",
@@ -63,7 +62,6 @@ from schemas.findings import (
     EvidenceStrengthT,
     ExplanationSourceT,
     Finding,
-    Judgment,
     Recommendation,
 )
 from schemas.reports import (

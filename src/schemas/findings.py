@@ -3,8 +3,8 @@
 Владельцы: Candidate — Бек-2 (детекторы), Judgment — ML, Finding/Recommendation —
 сборщик отчёта (Бек-1/Бек-3).
 
-Главное правило: числа и ссылки всегда берутся из Candidate.facts, а не из текста
-модели. Модель добавляет только прозу и assessment.
+Числа и ссылки берутся из детектора. ML-контракт находится в agent_review.schemas:
+модель выбирает факты, цитаты и совет; свободную прозу в отчёт не добавляем.
 """
 
 from typing import Literal
@@ -23,6 +23,14 @@ CandidateKindT = Literal[
     "human_intervention",  # вмешательство человека
     "reverted_edit",  # откат правки A -> B -> A
     "long_gap",  # интервал без записей
+    "expensive_segment",
+    "spend_without_progress",
+    "file_churn",
+    "file_rewrite_loop",
+    "environment_failure",
+    "tool_underuse",
+    "missing_tool",
+    "tool_denied",
 ]
 
 EvidenceStrengthT = Literal[
@@ -70,26 +78,6 @@ class Candidate(BaseModel):
     rank: int | None = Field(default=None, description="Позиция после ранжирования, с 0")
 
 
-class Judgment(BaseModel):
-    """Ответ модели по одному кандидату. Форма совпадает со JSON-схемой LLM."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    candidate_id: str
-    assessment: AssessmentT
-    evidence_step_ids: list[str] = Field(
-        description="Подмножество allowed_step_ids этого кандидата"
-    )
-    explanation: str
-    likely_cause: str | None = None
-    action: str | None = None
-    verification: str | None = None
-    rule_text: str | None = Field(
-        default=None, description="Текст правила для CLAUDE.generated.md"
-    )
-    limitations: list[str] = Field(default_factory=list)
-
-
 class Recommendation(BaseModel):
     """Рекомендация для следующей сессии. Всегда связана с находкой."""
 
@@ -124,8 +112,9 @@ class Finding(BaseModel):
         default=None, description="null, если объяснения нет"
     )
     explanation: str | None = None
-    likely_cause: str | None = Field(default=None, description="Всегда предположение")
+    likely_cause: None = Field(default=None, description="Свободные предположения о причинах отключены")
     explanation_source: ExplanationSourceT = "not_explained"
 
     limitations: list[str] = Field(default_factory=list)
     detector_version: str | None = None
+    citations: list[dict[str, str]] = Field(default_factory=list)

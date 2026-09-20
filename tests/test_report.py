@@ -1,7 +1,7 @@
 """Тесты того, что детектор отдаёт наружу: покрытие направлений, полосы
 значимости, рекомендации и готовый файл правил."""
 
-import glob
+from tests.corpus import real_logs
 import json
 import os
 import sys
@@ -83,7 +83,7 @@ class TestSeverityBands(unittest.TestCase):
             self.assertIn(f["evidenceStrength"], ("direct", "indirect"))
 
     def test_sorted_by_band_then_number(self):
-        report = analyze_file(_biggest_log()) if _biggest_log() else None
+        report = analyze_log(_biggest_log()[1]) if _biggest_log() else None
         if report is None:
             self.skipTest("нет настоящих логов")
         order = {b: i for i, b in enumerate(BANDS)}
@@ -194,18 +194,17 @@ class TestErrorDenominator(unittest.TestCase):
 
 
 def _biggest_log():
-    files = [f for f in glob.glob(os.path.expanduser("~/.claude/projects/**/*.jsonl"), recursive=True)
-             if os.path.getsize(f) < 20_000_000]
-    return max(files, key=os.path.getsize) if files else None
+    files = real_logs()
+    return max(files, key=lambda x: len(x[1])) if files else None
 
 
 class TestRealLogsReport(unittest.TestCase):
     def test_all_real_logs_produce_full_report(self):
-        files = sorted(glob.glob(os.path.expanduser("~/.claude/projects/**/*.jsonl"), recursive=True))
+        files = real_logs()
         if not files:
             self.skipTest("нет настоящих логов")
-        for path in files:
-            report = analyze_file(path)
+        for path, text in files:
+            report = analyze_log(text)
             name = os.path.basename(path)[:8]
             self.assertEqual(len(report["coverage"]), len(DIRECTIONS), name)
             required = [d for d in report["coverage"] if d["required"]]

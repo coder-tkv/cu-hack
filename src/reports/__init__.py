@@ -1,3 +1,1 @@
-__all__ = ("exporters",)
-
-from reports import exporters
+"""Report adapters are usable without initializing database configuration."""

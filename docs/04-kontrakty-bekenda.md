@@ -133,68 +133,45 @@ provenance, artifacts[], created_at
 Индексы: `(session_id, ordinal)`, `(session_id, tool_call_id)`, `analyses.session_id`, `analyses.status`.
 `tool_calls`, `usage_records`, `findings`, `reports`, `artifacts` отдельными таблицами в MVP **не** делаем.
 
-## API — работает уже сейчас (на мок-данных)
+## API и общий пайплайн
 
-| Метод | Путь | Ответ |
-|---|---|---|
-| POST | `/api/sessions` | 202 `SessionCreated`; multipart: `file`, `format`, `llm_enabled` |
-| GET | `/api/sessions/{session_id}` | `SessionSummary` |
-| GET | `/api/sessions/{session_id}/steps?cursor=&limit=` | `StepsPage` (`limit` ≤ 200) |
-| GET | `/api/sessions/{session_id}/steps/{step_id}` | `StepDetail` (шаг + 3 соседа с каждой стороны) |
-| GET | `/api/analyses/{analysis_id}` | `AnalysisState` — опрашивать раз в 2 с |
-| GET | `/api/analyses/{analysis_id}/report` | `Report`; 409 `report_not_ready`, пока не собран |
-| GET | `/api/analyses/{analysis_id}/artifacts/{name}` | файл, только из allowlist |
-| GET | `/api/health` | `{"status":"ok"}` |
+API работает на загруженных JSONL Claude Code. Маршруты: `POST /api/sessions`,
+`GET /api/sessions/{id}`, `GET /api/sessions/{id}/steps`,
+`GET /api/sessions/{id}/steps/{step_id}`, `GET /api/analyses/{id}`,
+`GET /api/analyses/{id}/report`, `GET /api/analyses/{id}/artifacts/{name}` и `/api/health`.
+Точные схемы доступны в `/docs` и `/openapi.json`; пагинация шагов ограничена 200 элементами.
 
-Фронт берёт типы из OpenAPI (`/docs`, `/openapi.json`) и не угадывает поля.
-Ошибки приходят в `detail` в формате `ApiError` (`code`, `message`, `status`, `status_url`).
+`jobs/runner.py` читает настоящий файл через `analysis.parse_file`, запускает
+`analysis.analyze_parsed` и сохраняет шаги. `reports/builder.py` переводит внутренний
+отчёт детекторов в HTTP-отчёт и ML-пакет версии 2. ML получает наблюдения типа
+`detector_observation`, факты с доказательствами и контекст; затем автоматически
+выполняются маскирование, сжатие, лимит размера, вызов модели и проверка цитат.
+Сигнал детектора не становится доказанной неэффективностью автоматически.
 
-Загрузка уже настоящая: файл пишется потоково в `data/uploads/<session_id>.jsonl`,
-считается sha256 и размер, лимит 50 МБ, пустой файл → 400. Но **разбора файла ещё нет**:
-`jobs/runner.py` проходит стадии `parsing → analyzing → explaining → assembling` и кладёт
-мок-шаги и мок-отчёт из `src/mocks/fixture.py`. В `warnings` про это честно написано.
+В `POST /api/sessions` параметр `llm_enabled` по умолчанию **false**. При включённом
+ML и отсутствии ключа либо ошибке модели факты сохраняются, отчёт получает
+`partial`. Файл неизвестного формата получает `insufficient_data`, а не чистый отчёт.
+Несколько исходных сессий в одном файле нужно загрузить отдельно.
 
-Артефакты (`report.md`, `report.json`, `CLAUDE.generated.md`) уже генерируются из `Report`
-в `reports/exporters.py` и лежат в `data/exports/<analysis_id>/`.
+HTTP-контракт сохраняет `schema_version=1`; это не версия ML-контракта.
+В `Finding` добавлены `citations` и виды кандидатов для всех детекторов.
+В `Step` сохраняются `usage` и `result_metadata`, когда они есть в логе.
+В `Report` добавлены `directions`, `analysis_usage`, `ml_details` (сжатие и причины
+пропусков). Расход на ML-анализ отделён от расхода исходной сессии. Старый
+дублирующий `schemas.Judgment` удалён: актуальная схема находится в `agent_review.schemas`.
 
-## Куда подключать свою часть
+Моки `src/mocks/` удалены. Артефакты собираются из того же `Report`, что хранится в БД.
+Все изменения статуса проходят через `crud.analyses`; незавершённые задачи после
+перезапуска отмечаются `interrupted`. Используем один процесс backend и одну очередь
+в памяти; PostgreSQL хранит результаты и состояние.
 
-Все точки помечены `TODO` в `src/jobs/runner.py`:
+## Запуск и проверка
 
-- **Бек-1** — стадия `parsing`: вместо `build_mock_steps()` вернуть настоящие `Step` из
-  `parsers/claude_code.py` (путь к файлу лежит в `sessions.file_path`), заполнить
-  `SessionInfo` и записать его в `sessions.meta` через `crud.sessions.set_session_meta`.
-  Сохранение шагов уже есть: `crud.sessions.save_steps(db, steps)`.
-- **Бек-2** — стадия `analyzing`: получить шаги из БД/парсера, вернуть `list[Candidate]`.
-- **ML** — стадия `explaining`: `context_builder` → `llm.explain(packet)` → `validator`,
-  вернуть `list[Judgment]`. При падении LLM — `rule_based`-объяснения и статус `partial`.
-- **Сборка** — `reports/builder.py`: `Candidate` + `Judgment` → `Report`, дальше уже
-  работает `write_artifacts()` и `crud.analyses.save_report()`.
+Из корня репозитория: `docker compose up -d --build --wait`.
+Swagger: http://localhost:8080/docs. Проверка: `python3 scripts/check_api.py`.
+Инструкция, параметры ML и команды тестов — в [README](../README.md).
 
-Статусы и прогресс пишутся только через `crud.analyses.set_stage(...)`. Руками таблицу
-не обновляем.
-
-Мок удаляется целиком (`src/mocks/`) в момент, когда сквозная цепочка пойдёт на реальном логе.
-
-## Локальный запуск
-
-Хостовые порты сдвинуты, потому что 5432/6379 часто заняты другим проектом:
-Postgres → `5433`, Redis → `6380`.
-
-```bash
-cp src/.env.template src/.env     # уже содержит порт 5433
-docker compose up -d db
-cd src && uv run alembic upgrade head
-uv run uvicorn main:app --reload --port 8080
-# проверка сквозного сценария:
-curl -X POST localhost:8080/api/sessions -F file=@session.jsonl -F format=claude_code
-```
-
-Redis и примеры из шаблона (users, redis_example, crud/users) удалены — не нужны.
-Порт Postgres на хосте — **5433**, внутри docker-сети по-прежнему 5432.
-
-Новая миграция после правки моделей:
-
-```bash
-cd src && uv run alembic revision --autogenerate -m "что изменили" && uv run alembic upgrade head
-```
+PostgreSQL доступен на localhost:5433; Redis и демонстрационные users-модули не нужны.
+Для локального Python можно использовать `.env` по образцу `src/.env.template`,
+установить зависимости через `uv sync`, затем запускать из `src/`:
+`../.venv/bin/alembic upgrade head` и `../.venv/bin/uvicorn main:app --port 8080`.

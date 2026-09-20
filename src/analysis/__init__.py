@@ -12,15 +12,15 @@ from .detectors import run_all
 def analyze_log(text: str) -> dict:
     """Текст лога -> отчёт без LLM-части: meta, kpi, findings, steps."""
     parsed = parse_log(text)
-    return _finish(parsed)
+    return analyze_parsed(parsed)
 
 
 def analyze_file(path: str) -> dict:
     parsed = parse_file(path)
-    return _finish(parsed)
+    return analyze_parsed(parsed)
 
 
-def _finish(parsed: dict) -> dict:
+def analyze_parsed(parsed: dict) -> dict:
     steps = parsed["steps"]
     findings, warnings = run_all(steps)
     meta = dict(parsed["meta"])
@@ -53,6 +53,7 @@ __all__ = [
     "build_claude_md",
     "census",
     "analyze_file",
+    "analyze_parsed",
     "parse_log",
     "parse_file",
     "session_timing",
