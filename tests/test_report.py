@@ -1,0 +1,502 @@
+"""Тесты того, что детектор отдаёт наружу: покрытие направлений, полосы
+значимости, рекомендации и готовый файл правил."""
+
+import glob
+import json
+import os
+import sys
+import unittest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+
+from analysis import analyze_file, analyze_log  # noqa: E402
+from analysis.coverage import CLEAN, DIRECTIONS, FOUND, INSUFFICIENT  # noqa: E402
+from analysis.detectors import FINDING_TYPES  # noqa: E402
+from analysis.recommendations import CLAUDE_MD, RULE, SKILL, TEMPLATES, TOOL_SETUP  # noqa: E402
+from analysis.severity import BANDS  # noqa: E402
+from tests.test_hard import call_line, human_line, result_line  # noqa: E402
+
+ARTIFACT_TYPES = {CLAUDE_MD, RULE, SKILL, TOOL_SETUP}
+
+
+def npm_loop(times: int = 4) -> str:
+    lines = [human_line("почини тесты", 0)]
+    for i in range(times):
+        lines += [call_line("Bash", {"command": "npm test"}, f"c{i}", i * 2 + 1),
+                  result_line(f"c{i}", 'npm error Missing script: "test"', i * 2 + 2, is_error=True)]
+    return "\n".join(lines)
+
+
+class TestCoverage(unittest.TestCase):
+    """По каждому из шести направлений отчёт обязан сказать что-то определённое."""
+
+    def test_six_required_directions_plus_extras(self):
+        cov = analyze_log(npm_loop())["coverage"]
+        self.assertEqual(len([d for d in cov if d["required"]]), 6)
+        self.assertEqual(len(cov), len(DIRECTIONS))
+
+    def test_six_directions_always_present(self):
+        for log in (npm_loop(), "", '{"битый', human_line("привет", 0)):
+            cov = analyze_log(log)["coverage"]
+            self.assertEqual([d["direction"] for d in cov], [d["id"] for d in DIRECTIONS])
+            for d in cov:
+                self.assertIn(d["status"], (FOUND, CLEAN, INSUFFICIENT))
+                self.assertTrue(d["note"])
+
+    def test_status_matches_findings(self):
+        report = analyze_log(npm_loop())
+        ids = {f["id"] for f in report["findings"]}
+        for d in report["coverage"]:
+            if d["status"] == FOUND:
+                self.assertGreater(d["findings"], 0)
+                self.assertTrue(set(d["findingIds"]).issubset(ids))
+            else:
+                self.assertEqual(d["findings"], 0)
+            if d["status"] == CLEAN:
+                self.assertGreater(sum(d["checked"].values()), 0, "чисто можно говорить только при данных")
+            if d["status"] == INSUFFICIENT and "меньше трёх участков" not in d["note"]:
+                self.assertEqual(sum(d["checked"].values()), 0)
+
+    def test_empty_log_is_insufficient_everywhere(self):
+        cov = analyze_log("")["coverage"]
+        self.assertTrue(all(d["status"] == INSUFFICIENT for d in cov))
+
+    def test_clean_direction_reports_denominator(self):
+        """Лог без единой правки файлов: направление правок обязано сказать «данных нет»,
+        а направление повторов — «проверено N вызовов»."""
+        report = analyze_log(npm_loop())
+        edits = next(d for d in report["coverage"] if d["direction"] == "edits")
+        repeats = next(d for d in report["coverage"] if d["direction"] == "repeats")
+        self.assertEqual(edits["status"], INSUFFICIENT)
+        self.assertEqual(edits["checked"]["fileEdits"], 0)
+        self.assertEqual(repeats["status"], FOUND)
+        self.assertGreater(repeats["checked"]["toolCalls"], 0)
+
+
+class TestSeverityBands(unittest.TestCase):
+    def test_every_finding_has_band_and_rules(self):
+        report = analyze_log(npm_loop())
+        self.assertTrue(report["findings"])
+        for f in report["findings"]:
+            self.assertIn(f["severityBand"], BANDS)
+            self.assertTrue(f["severityRules"], f"{f['type']} без объяснения полосы")
+            self.assertIn(f["evidenceStrength"], ("direct", "indirect"))
+
+    def test_sorted_by_band_then_number(self):
+        report = analyze_file(_biggest_log()) if _biggest_log() else None
+        if report is None:
+            self.skipTest("нет настоящих логов")
+        order = {b: i for i, b in enumerate(BANDS)}
+        keys = [(order[f["severityBand"]], -f["severity"]) for f in report["findings"]]
+        self.assertEqual(keys, sorted(keys), "находки не отсортированы по полосам")
+
+    def test_confirmed_retry_loop_is_high(self):
+        f = next(x for x in analyze_log(npm_loop(4))["findings"] if x["type"] == "retry_loop")
+        self.assertEqual(f["severityBand"], "высокая")
+
+    def test_pause_is_low_and_informational(self):
+        log = "\n".join([human_line("сделай", 0), call_line("Bash", {"command": "ls"}, "c0", 1),
+                         result_line("c0", "ok", 5000)])
+        f = next((x for x in analyze_log(log)["findings"] if x["type"] == "idle_gaps"), None)
+        self.assertIsNotNone(f)
+        self.assertEqual(f["severityBand"], "низкая")
+        self.assertTrue(f["informational"])
+
+
+class TestRecommendations(unittest.TestCase):
+    def test_every_finding_type_has_a_template(self):
+        self.assertEqual(sorted(set(FINDING_TYPES) - set(TEMPLATES)), [])
+
+    def test_recommendations_are_tied_to_findings(self):
+        report = analyze_log(npm_loop())
+        ids = {f["id"] for f in report["findings"]}
+        self.assertTrue(report["recommendations"])
+        for r in report["recommendations"]:
+            self.assertTrue(r["findingIds"], "рекомендация без находки — общий совет, так нельзя")
+            self.assertTrue(set(r["findingIds"]).issubset(ids))
+            self.assertIn(r["artifactType"], ARTIFACT_TYPES)
+            self.assertTrue(r["filename"])
+            self.assertTrue(r["content"].strip())
+            for key in ("action", "rationale", "verify"):
+                self.assertTrue(r[key].strip(), f"{r['id']}: пустое поле {key}")
+
+    def test_findings_point_back_to_recommendation(self):
+        report = analyze_log(npm_loop())
+        rec_ids = {r["id"] for r in report["recommendations"]}
+        for f in report["findings"]:
+            self.assertIn(f["recommendationId"], rec_ids, f"{f['type']} без рекомендации")
+
+    def test_no_findings_no_recommendations(self):
+        log = "\n".join([human_line("прочитай файл", 0),
+                         call_line("Read", {"file_path": "/p/a.ts"}, "c0", 1),
+                         result_line("c0", "export const a = 1", 2)])
+        report = analyze_log(log)
+        self.assertEqual(report["findings"], [])
+        self.assertEqual(report["recommendations"], [])
+        self.assertIn("не предлагается", report["artifacts"]["CLAUDE.generated.md"])
+
+    def test_claude_md_contains_every_patch(self):
+        report = analyze_log(npm_loop())
+        doc = report["artifacts"]["CLAUDE.generated.md"]
+        for r in report["recommendations"]:
+            if r["artifactType"] == CLAUDE_MD:
+                self.assertIn(r["content"].splitlines()[0], doc)
+                self.assertIn(r["verify"], doc)
+
+    def test_skill_draft_appears_for_command_problems(self):
+        report = analyze_log(npm_loop())
+        skill = next((r for r in report["recommendations"] if r["artifactType"] == SKILL), None)
+        self.assertIsNotNone(skill, "кейс просит черновик скилла — его нет")
+        self.assertTrue(skill["filename"].endswith("SKILL.md"))
+        self.assertTrue(skill["content"].startswith("---\nname: "))
+        self.assertIn("description:", skill["content"])
+
+    def test_no_skill_draft_without_command_problems(self):
+        log = "\n".join([human_line("[Request interrupted by user]", 0),
+                         human_line("[Request interrupted by user]", 1)])
+        report = analyze_log(log)
+        self.assertTrue(report["findings"])
+        self.assertEqual([r for r in report["recommendations"] if r["artifactType"] == SKILL], [])
+
+    def test_recommendations_quote_the_log(self):
+        """Рекомендация должна быть привязана к находке, а не сформулирована в общем виде."""
+        report = analyze_log(npm_loop())
+        rec = next(r for r in report["recommendations"] if r["findingType"] == "retry_loop")
+        self.assertTrue(rec["examples"])
+        self.assertIn("npm test", json.dumps(rec["examples"], ensure_ascii=False))
+
+
+class TestErrorDenominator(unittest.TestCase):
+    def test_call_without_result_is_unknown_not_success(self):
+        log = "\n".join([call_line("Bash", {"command": "ls"}, "c0", 1), result_line("c0", "ok", 2),
+                         call_line("Bash", {"command": "sleep 1"}, "c1", 3)])  # результата нет
+        kpi = analyze_log(log)["kpi"]
+        self.assertEqual(kpi["toolCalls"], 2)
+        self.assertEqual(kpi["callsWithKnownStatus"], 1)
+        self.assertEqual(kpi["unknownStatusCount"], 1)
+        self.assertEqual(kpi["errorRate"], 0.0)
+
+    def test_error_rate_is_none_without_denominator(self):
+        log = call_line("Bash", {"command": "ls"}, "c0", 1)
+        kpi = analyze_log(log)["kpi"]
+        self.assertIsNone(kpi["errorRate"], "нулевой знаменатель — это «нет данных», а не 0%")
+
+    def test_rate_uses_known_status_only(self):
+        lines = []
+        for i in range(10):
+            lines += [call_line("Bash", {"command": f"cmd{i}"}, f"c{i}", i)]
+            if i < 6:
+                lines += [result_line(f"c{i}", "Error: boom", i, is_error=True)]
+        kpi = analyze_log("\n".join(lines))["kpi"]
+        self.assertEqual(kpi["callsWithKnownStatus"], 6)
+        self.assertEqual(kpi["unknownStatusCount"], 4)
+        self.assertEqual(kpi["errorRate"], 1.0)
+
+
+def _biggest_log():
+    files = [f for f in glob.glob(os.path.expanduser("~/.claude/projects/**/*.jsonl"), recursive=True)
+             if os.path.getsize(f) < 20_000_000]
+    return max(files, key=os.path.getsize) if files else None
+
+
+class TestRealLogsReport(unittest.TestCase):
+    def test_all_real_logs_produce_full_report(self):
+        files = sorted(glob.glob(os.path.expanduser("~/.claude/projects/**/*.jsonl"), recursive=True))
+        if not files:
+            self.skipTest("нет настоящих логов")
+        for path in files:
+            report = analyze_file(path)
+            name = os.path.basename(path)[:8]
+            self.assertEqual(len(report["coverage"]), len(DIRECTIONS), name)
+            required = [d for d in report["coverage"] if d["required"]]
+            self.assertEqual(len(required), 6, f"{name}: шесть направлений кейса обязаны быть все")
+            ids = {f["id"] for f in report["findings"]}
+            for r in report["recommendations"]:
+                self.assertTrue(set(r["findingIds"]).issubset(ids), name)
+            for f in report["findings"]:
+                self.assertIn(f["severityBand"], BANDS, name)
+                self.assertTrue(f["severityRules"], f"{name}: {f['type']}")
+            doc = report["artifacts"]["CLAUDE.generated.md"]
+            self.assertTrue(doc.strip(), name)
+            json.dumps(report, ensure_ascii=False)  # отчёт обязан сериализоваться целиком
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class TestMergedFindings(unittest.TestCase):
+    """Однотипные находки по одной цели склеиваются в одну со списком эпизодов."""
+
+    def _log_with_episodes(self, episodes: int = 3, per_episode: int = 3) -> str:
+        lines = [human_line("поработай", 0)]
+        t = 1
+        for ep in range(episodes):
+            for i in range(per_episode):
+                lines += [call_line("Bash", {"command": "docker compose up -d"}, f"c{ep}_{i}", t),
+                          result_line(f"c{ep}_{i}", "Error: port is already allocated", t + 1, is_error=True)]
+                t += 2
+            for j in range(12):  # разрыв, чтобы эпизоды не слиплись в один кластер
+                lines += [call_line("Read", {"file_path": f"/p/f{ep}_{j}.ts"}, f"r{ep}_{j}", t),
+                          result_line(f"r{ep}_{j}", "ok", t + 1)]
+                t += 2
+        return "\n".join(lines)
+
+    def test_same_target_becomes_one_finding(self):
+        report = analyze_log(self._log_with_episodes())
+        repeats = [f for f in report["findings"] if f["type"] == "repeated_call"]
+        self.assertEqual(len(repeats), 1, "три эпизода одного вызова — одна находка")
+        f = repeats[0]
+        self.assertEqual(f["episodeCount"], 3)
+        self.assertEqual(f["metrics"]["repeats"], 9)
+        self.assertIn("эпизодах", f["title"])
+
+    def test_each_episode_keeps_its_own_evidence(self):
+        f = next(x for x in analyze_log(self._log_with_episodes())["findings"] if x["type"] == "repeated_call")
+        for ep in f["episodes"]:
+            self.assertTrue(ep["callStepIds"], "эпизод без ссылок на шаги нельзя проверить")
+            self.assertTrue(ep["evidence"])
+            self.assertTrue(set(ep["callStepIds"]).issubset(set(ep["stepIds"])))
+
+    def test_different_targets_stay_separate(self):
+        lines = [human_line("поработай", 0)]
+        t = 1
+        for cmd in ("npm test", "docker compose up -d"):
+            for i in range(3):
+                lines += [call_line("Bash", {"command": cmd}, f"{cmd[:3]}{i}", t),
+                          result_line(f"{cmd[:3]}{i}", "Error: boom", t + 1, is_error=True)]
+                t += 2
+        repeats = [f for f in analyze_log("\n".join(lines))["findings"] if f["type"] == "repeated_call"]
+        self.assertEqual(len(repeats), 2, "разные команды склеивать нельзя")
+
+    def test_merged_is_not_weaker_than_its_episodes(self):
+        f = next(x for x in analyze_log(self._log_with_episodes())["findings"] if x["type"] == "repeated_call")
+        self.assertGreaterEqual(f["severity"], max(ep["severity"] for ep in f["episodes"]))
+        self.assertIn("эпизодов в сессии: 3", f["severityRules"])
+
+    def test_session_level_findings_untouched(self):
+        log = "\n".join(human_line("[Request interrupted by user]", i) for i in range(3))
+        f = next(x for x in analyze_log(log)["findings"] if x["type"] == "interruptions")
+        self.assertNotIn("episodes", f)
+
+    def test_merged_finding_still_has_recommendation(self):
+        report = analyze_log(self._log_with_episodes())
+        rec_ids = {r["id"] for r in report["recommendations"]}
+        for f in report["findings"]:
+            self.assertIn(f["recommendationId"], rec_ids)
+
+    def _churn_log(self, files: int) -> str:
+        lines = [human_line("правь", 0)]
+        t = 1
+        for n in range(files):
+            for i in range(4):
+                lines += [call_line("Edit", {"file_path": f"/p/file{n}.ts",
+                                             "old_string": f"v{i}", "new_string": f"v{i + 1}"}, f"e{n}_{i}", t),
+                          result_line(f"e{n}_{i}", "ok", t + 1)]
+                t += 2
+        return "\n".join(lines)
+
+    def test_few_per_file_findings_stay_separate(self):
+        findings = [f for f in analyze_log(self._churn_log(3))["findings"] if f["type"] == "file_churn"]
+        self.assertEqual(len(findings), 3, "на коротком логе три файла показываем отдельно")
+        self.assertTrue(all("episodes" not in f for f in findings))
+
+    def test_many_per_file_findings_are_merged(self):
+        findings = [f for f in analyze_log(self._churn_log(6))["findings"] if f["type"] == "file_churn"]
+        self.assertEqual(len(findings), 1, "шесть файлов сворачиваем в одну находку")
+        f = findings[0]
+        self.assertEqual(f["episodeCount"], 6)
+        self.assertEqual(f["metrics"]["edits"], 24)
+        for ep in f["episodes"]:
+            self.assertTrue(ep["evidence"]["filePath"], "в эпизоде должен остаться конкретный файл")
+
+
+class TestToolRecommendations(unittest.TestCase):
+    """«Какие инструменты подключить» — требование кейса на странице 5."""
+
+    def test_missing_cli_lists_what_to_install(self):
+        lines = [human_line("собери отчёт", 0)]
+        for i in range(3):
+            lines += [call_line("Bash", {"command": "gh pr list"}, f"c{i}", i * 2 + 1),
+                      result_line(f"c{i}", "zsh: command not found: gh", i * 2 + 2, is_error=True)]
+        report = analyze_log("\n".join(lines))
+        rec = next(r for r in report["recommendations"] if r["findingType"] == "missing_cli")
+        self.assertEqual(rec["artifactType"], TOOL_SETUP)
+        self.assertIn("gh", rec["content"])
+        self.assertIn("GitHub CLI", rec["content"], "для известных команд подсказываем, что ставить")
+        self.assertEqual(rec["tools"], ["gh"])
+
+    def test_denied_calls_produce_settings_draft(self):
+        lines = [human_line("подними базу", 0)]
+        for i in range(2):
+            lines += [call_line("Bash", {"command": "docker compose up -d"}, f"c{i}", i * 2 + 1),
+                      result_line(f"c{i}", "The user doesn't want to proceed with this tool use.",
+                                  i * 2 + 2, is_error=True)]
+        report = analyze_log("\n".join(lines))
+        rec = next(r for r in report["recommendations"] if r["findingType"] == "tool_permission_denied")
+        self.assertEqual(rec["filename"], ".claude/settings.json")
+        self.assertIn("permissions", rec["content"])
+        self.assertIn("docker compose", rec["content"])
+        json.loads(rec["content"].split("```json")[1].split("```")[0])  # черновик обязан быть валидным JSON
+
+    def test_bash_instead_of_tool_names_unused_tools(self):
+        lines = [human_line("посмотри файлы", 0)]
+        for i in range(6):
+            lines += [call_line("Bash", {"command": f"cat /p/file{i}.ts"}, f"c{i}", i * 2 + 1),
+                      result_line(f"c{i}", "содержимое", i * 2 + 2)]
+        report = analyze_log("\n".join(lines))
+        f = next(x for x in report["findings"] if x["type"] == "bash_instead_of_tool")
+        self.assertEqual(f["metrics"]["tool"], "Read")
+        self.assertFalse(f["metrics"]["toolUsedInSession"])
+        rec = next(r for r in report["recommendations"] if r["findingType"] == "bash_instead_of_tool")
+        self.assertIn("Read", rec["action"])
+        self.assertIn("ни разу не вызывались", rec["action"])
+
+    def test_tool_setup_lands_in_generated_file(self):
+        lines = [human_line("собери отчёт", 0)]
+        for i in range(3):
+            lines += [call_line("Bash", {"command": "pandoc a.md -o a.pdf"}, f"c{i}", i * 2 + 1),
+                      result_line(f"c{i}", "zsh: command not found: pandoc", i * 2 + 2, is_error=True)]
+        report = analyze_log("\n".join(lines))
+        doc = report["artifacts"]["CLAUDE.generated.md"]
+        self.assertIn("Инструменты и доступы", doc)
+        self.assertIn("pandoc", doc)
+
+
+class TestFactsAndCandidates(unittest.TestCase):
+    """Дизайн показывает «ФАКТ — посчитано кодом» и строку ограничения.
+    Контракт бекенда требует Candidate с закрытым списком kind."""
+
+    def test_every_finding_has_fact_with_numbers(self):
+        report = analyze_log(npm_loop())
+        self.assertTrue(report["findings"])
+        for f in report["findings"]:
+            self.assertTrue(f["fact"].strip(), f"{f['type']}: пустой факт")
+            self.assertTrue(any(ch.isdigit() for ch in f["fact"]),
+                            f"{f['type']}: в факте нет ни одного числа — это не факт, а мнение")
+            self.assertNotIn("вероятно", f["fact"].lower(), "предположения — работа модели, не кода")
+
+    def test_every_finding_states_its_limits(self):
+        for f in analyze_log(npm_loop())["findings"]:
+            self.assertTrue(f["limitations"], f"{f['type']}: не сказано, чего код не знает")
+
+    def test_all_finding_types_have_a_fact_template(self):
+        from analysis.facts import _COMMON
+
+        self.assertEqual(sorted(set(FINDING_TYPES) - set(_COMMON)), [])
+
+    def test_candidates_match_frozen_contract(self):
+        from analysis.candidates import KIND_MAP, to_candidates
+
+        allowed = {"repeated_tool_call", "repeated_failed_tool", "failure_chain",
+                   "human_intervention", "reverted_edit", "long_gap"}
+        self.assertTrue(set(KIND_MAP.values()).issubset(allowed))
+        report = analyze_log(npm_loop())
+        candidates, unmapped = to_candidates(report["findings"])
+        self.assertTrue(candidates)
+        for c in candidates:
+            self.assertIn(c["kind"], allowed)
+            self.assertTrue(c["evidence_step_ids"], "кандидат без ссылок недопустим")
+            self.assertTrue(all(isinstance(i, str) for i in c["evidence_step_ids"]))
+            self.assertIsNone(c["severity"], "severity заполняет ranking.py, не детектор")
+            self.assertIsNone(c["rank"])
+            self.assertIn(c["evidence_strength"], ("direct", "indirect", "weak"))
+            for k, v in c["facts"].items():
+                self.assertIsInstance(v, (int, float, bool, str, type(None)), f"facts.{k} не плоский")
+
+    def test_unsupported_kinds_are_reported_not_faked(self):
+        from analysis.candidates import to_candidates
+
+        lines = [human_line("правь", 0)]
+        for i in range(4):
+            lines += [call_line("Edit", {"file_path": "/p/a.ts", "old_string": f"v{i}",
+                                         "new_string": f"v{i + 1}"}, f"e{i}", i * 2 + 1),
+                      result_line(f"e{i}", "ok", i * 2 + 2)]
+        _, unmapped = to_candidates(analyze_log("\n".join(lines))["findings"])
+        self.assertTrue(unmapped, "file_churn в контракте отсутствует — это нужно показать, а не спрятать")
+        for u in unmapped:
+            self.assertTrue(u["proposedKind"])
+            self.assertTrue(u["ourType"])
+
+    def test_step_ids_may_be_strings(self):
+        """Общий контракт использует step_id вида s_7d9:line_42:block_0."""
+        from analysis.candidates import to_candidates
+        from analysis.detectors.util import finding
+
+        f = finding("repeated_call", severity=0.5, title="x",
+                    step_ids=["s1:line_4:block_0", "s1:line_9:block_0", "s1:line_4:block_0"],
+                    explanation="y")
+        self.assertEqual(f["stepIds"], ["s1:line_4:block_0", "s1:line_9:block_0"])
+        f.update({"detector": "repeated", "evidenceStrength": "direct", "limitations": [], "fact": "3 раза"})
+        candidates, _ = to_candidates([f])
+        self.assertEqual(candidates[0]["evidence_step_ids"], f["stepIds"])
+
+
+class TestCardFields(unittest.TestCase):
+    """Поля, из которых фронт собирает карточку находки по макету."""
+
+    def test_every_type_has_category_and_headline(self):
+        from analysis.presentation import CATEGORY, HEADLINE, NOT_AGENT_BEHAVIOUR
+
+        self.assertEqual(sorted(set(FINDING_TYPES) - set(CATEGORY)), [])
+        # сбои среды в заголовок «Агент …» не попадают намеренно
+        self.assertEqual(sorted(set(FINDING_TYPES) - set(HEADLINE) - NOT_AGENT_BEHAVIOUR), [])
+        self.assertTrue(NOT_AGENT_BEHAVIOUR.isdisjoint(HEADLINE))
+
+    def test_card_fields_present(self):
+        for f in analyze_log(npm_loop())["findings"]:
+            self.assertTrue(f["categoryTitle"], f"{f['type']}: нет заголовка карточки")
+            self.assertTrue(f["category"])
+            self.assertEqual(f["evidenceSteps"], len(f["stepIds"]))
+            self.assertEqual(f["explanationSource"], "rule_based",
+                             "объяснение сейчас от кода; llm ставит ML, когда объяснит")
+
+    def test_summary_counts_match_findings(self):
+        report = analyze_log(npm_loop())
+        s = report["summary"]
+        self.assertEqual(s["total"], len(report["findings"]))
+        self.assertEqual(sum(s["byBand"].values()), len(report["findings"]))
+        self.assertTrue(s["headline"].startswith("Агент "))
+
+    def test_environment_failures_do_not_reach_the_headline(self):
+        lines = [json.dumps({"type": "assistant", "subtype": "api_error",
+                             "timestamp": f"2026-09-20T10:00:0{i}.000Z",
+                             "message": {"id": f"e{i}", "role": "assistant", "model": "claude-opus-5",
+                                         "content": [{"type": "text", "text": "API Error: 529"}]}})
+                 for i in range(3)]
+        s = analyze_log("\n".join(lines))["summary"]
+        self.assertEqual(s["total"], 1)
+        self.assertNotIn("Агент", s["headline"], "сбой API — не поведение агента")
+
+    def test_unreadable_input_is_not_a_clean_session(self):
+        """Нераспознанный формат и пустой файл нельзя показывать как «проблем нет»."""
+        cases = {
+            "": "нет записей",
+            '{"event": "tool"}\n{"event": "msg"}': "Формат не распознан",
+            '{"type":"assis': "нет записей",
+        }
+        for log, expected in cases.items():
+            s = analyze_log(log)["summary"]
+            self.assertEqual(s["dataStatus"], "insufficient_data", repr(log[:20]))
+            self.assertNotIn("не найдено", s["headline"], repr(log[:20]))
+            self.assertIn(expected.split()[0], s["headline"], repr(log[:20]))
+
+    def test_summary_when_nothing_found(self):
+        log = "\n".join([human_line("прочитай файл", 0),
+                         call_line("Read", {"file_path": "/p/a.ts"}, "c0", 1),
+                         result_line("c0", "export const a = 1", 2)])
+        s = analyze_log(log)["summary"]
+        self.assertEqual(s["total"], 0)
+        self.assertEqual(s["dataStatus"], "complete", "данные есть, просто проблем нет")
+        self.assertIn("не найдено", s["headline"])
+
+    def test_rule_snippet_fits_the_card(self):
+        for r in analyze_log(npm_loop())["recommendations"]:
+            self.assertTrue(r["ruleSnippet"])
+            self.assertLessEqual(len(r["ruleSnippet"]), 230)
+            self.assertNotIn("#", r["ruleSnippet"], "заголовки markdown в рамку карточки не идут")
+
+    def test_assessment_is_not_invented_by_code(self):
+        """inefficient / reasonable / uncertain ставит модель, не детектор."""
+        for f in analyze_log(npm_loop())["findings"]:
+            self.assertNotIn("assessment", f)
