@@ -6,11 +6,11 @@
 import json
 from pathlib import Path
 
-from config import settings
 from schemas import ARTIFACT_ALLOWLIST, Report
 
 
 def artifacts_dir(analysis_id: str) -> Path:
+    from config import settings
     return settings.storage.exports_dir / analysis_id
 
 
@@ -112,10 +112,26 @@ def write_artifacts(report: Report) -> list[str]:
     """Пишет все три артефакта на диск, возвращает их имена."""
     out = artifacts_dir(report.analysis_id)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "report.json").write_text(
-        json.dumps(report.model_dump(mode="json"), ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    (out / "report.md").write_text(render_report_md(report), encoding="utf-8")
-    (out / "CLAUDE.generated.md").write_text(render_claude_md(report), encoding="utf-8")
+    export_report_json(report, out / "report.json")
+    export_report_md(report, out / "report.md")
+    export_claude_generated_md(report, out / "CLAUDE.generated.md")
     return list(ARTIFACT_ALLOWLIST)
+
+
+def _export(content: str, destination: str | Path) -> Path:
+    path = Path(destination)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+def export_report_json(report: Report, destination: str | Path) -> Path:
+    return _export(json.dumps(report.model_dump(mode="json"), ensure_ascii=False, indent=2), destination)
+
+
+def export_report_md(report: Report, destination: str | Path) -> Path:
+    return _export(render_report_md(report), destination)
+
+
+def export_claude_generated_md(report: Report, destination: str | Path) -> Path:
+    return _export(render_claude_md(report), destination)

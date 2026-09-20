@@ -7,6 +7,7 @@ from .parser import parse_file, parse_log, session_timing
 from .presentation import decorate, rule_snippet, summary
 from .recommendations import build_claude_md, build_recommendations
 from .detectors import run_all
+from .usage import extract_usage_records, summarize_usage
 
 
 def analyze_log(text: str) -> dict:
@@ -46,6 +47,8 @@ def analyze_parsed(parsed: dict) -> dict:
 
 
 __all__ = [
+    "extract_usage_records",
+    "summarize_usage",
     "analyze_log",
     "summary",
     "build_coverage",

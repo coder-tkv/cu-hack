@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import hashlib
 from typing import Any, Iterable
+from .usage import UsageCollector, summarize_usage, usage_id
 
 MAX_TEXT = 4000  # столько символов текста храним в шаге
 MAX_ARG_STR = 20000  # отдельная строка внутри args
@@ -135,6 +136,8 @@ def _text_of_blocks(blocks: Iterable[Any]) -> str:
                 parts.append(b["content"])
             elif isinstance(b.get("content"), list):
                 parts.append(_text_of_blocks(b["content"]))
+            elif b.get("type") == "tool_reference":
+                parts.append(json.dumps(b, ensure_ascii=False))
     return "\n".join(parts)
 
 
@@ -217,7 +220,7 @@ class Parser:
         self.steps: list[dict] = []
         self.warnings: list[str] = []
         self.stats = {"lines": 0, "blank": 0, "badJson": 0, "claudeCodeLines": 0}
-        self._seen_usage_msg_ids: set[str] = set()  # защита от двойного счёта usage
+        self.usage_collector = UsageCollector()
         self._tool_use_to_step: dict[tuple[str, str], int | None] = {}
         self._calls_by_tool_id: dict[str, list[dict]] = {}
         self._seen_records: set[str] = set()
@@ -243,6 +246,7 @@ class Parser:
         return step
 
     def _base(self, line: int, obj: dict) -> dict:
+        msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
         return {
             "id": 0,
             "line": line,
@@ -257,6 +261,9 @@ class Parser:
             "uuid": obj.get("uuid") if isinstance(obj.get("uuid"), str) else None,
             "parentUuid": obj.get("parentUuid") if isinstance(obj.get("parentUuid"), str) else None,
             "agentId": obj.get("agentId") if isinstance(obj.get("agentId"), str) else None,
+            "sessionId": obj.get("sessionId") if isinstance(obj.get("sessionId"), str) else None,
+            "messageId": msg.get("id") if isinstance(msg.get("id"), str) else None,
+            "usageRef": usage_id(obj),
             "scope": self._scope(obj),
             "raw": obj.get("type") if isinstance(obj.get("type"), str) else None,
             "sidechain": bool(obj.get("isSidechain")),
@@ -285,6 +292,7 @@ class Parser:
             self.warn(f"строка {line_no}: ожидался объект, пришло {type(obj).__name__}")
             return
 
+        self.usage_collector.add_event(obj, line_no)
         if isinstance(obj.get("uuid"), str):
             identity = hashlib.sha256(trimmed.encode()).hexdigest()
             if identity in self._seen_records:
@@ -342,14 +350,6 @@ class Parser:
 
     def _add_assistant(self, line_no: int, obj: dict) -> None:
         msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
-        msg_id = msg.get("id") if isinstance(msg.get("id"), str) else None
-
-        # usage дублируется в каждой строке одного ответа -> считаем один раз
-        usage = None
-        if msg_id is None or msg_id not in self._seen_usage_msg_ids:
-            usage = _norm_usage(msg.get("usage"))
-            if msg_id:
-                self._seen_usage_msg_ids.add(msg_id)
 
         model = msg.get("model") if isinstance(msg.get("model"), str) else None
         content = msg.get("content")
@@ -393,6 +393,12 @@ class Parser:
                 s["textLen"] = len(t)
                 self._push(s)
                 made.append(s)
+            else:
+                s = self._base(line_no, obj)
+                s["blockIndex"] = block_index
+                s["warnings"] = ["invalid_content_block_type" if not isinstance(btype, str) else "unknown_content_block"]
+                self._push(s)
+                made.append(s)
 
         if not made:
             # пустой ответ (только usage) — шаг всё равно нужен, чтобы токены не потерялись
@@ -403,8 +409,6 @@ class Parser:
 
         for st in made:
             st["model"] = model  # нужен для оценки стоимости шага
-        if usage:
-            made[0]["usage"] = usage
         if obj.get("subtype") == "api_error" or obj.get("isApiErrorMessage"):
             made[0]["isError"] = True
 
@@ -439,6 +443,9 @@ class Parser:
                 s["textLen"] = len(body_text)
                 explicit = b.get("is_error")
                 s["isError"] = explicit if isinstance(explicit, bool) else None
+                exit_code = b.get("exit_code")
+                if s["isError"] is None and isinstance(exit_code, int) and not isinstance(exit_code, bool):
+                    s["isError"] = exit_code != 0
                 if tur and (tur.get("interrupted") is True or tur.get("is_error") is True):
                     s["isError"] = True
                 if tur:
@@ -479,6 +486,18 @@ class Parser:
 
     # --- итог ----------------------------------------------------------
     def finish(self) -> dict:
+        usage = self.usage_collector.finish()
+        first_by_line = {}
+        for step in self.steps:
+            step["usage"] = None
+            first_by_line.setdefault(step["line"], step)
+        for record in usage.records:
+            target = next((first_by_line[n] for n in record.source_lines if n in first_by_line), None)
+            if target is not None and any(getattr(record, key) is not None for key in (
+                    "input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")):
+                target["usage"] = _norm_usage(record.model_dump())
+        usage_summary = summarize_usage(usage.records).model_dump()
+        usage_summary["limitations"].extend(usage.warnings)
         st = self.stats
         fmt = "unknown"
         if st["lines"] == 0:
@@ -508,6 +527,7 @@ class Parser:
                 "tsFrom": min(tss) if tss else None,
                 "tsTo": max(tss) if tss else None,
                 "warnings": self.warnings,
+                "usageSummary": usage_summary,
             },
             "steps": self.steps,
         }

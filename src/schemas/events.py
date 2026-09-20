@@ -90,15 +90,18 @@ class UsageRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     request_id: str = Field(description="request/message id исходного ответа")
-    session_id: str
+    session_id: str = "unknown"
+    message_id: str | None = None
     model: str | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
-    cache_read_tokens: int | None = None
-    cache_creation_tokens: int | None = None
+    cache_read_input_tokens: int | None = None
+    cache_creation_input_tokens: int | None = None
+    cache_creation: dict[str, int] | None = None
     is_final: bool | None = Field(default=None, description="null = финальность не установлена")
     source_lines: list[int] = Field(default_factory=list)
     step_ids: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
 
 class ParseStats(BaseModel):

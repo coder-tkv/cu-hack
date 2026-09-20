@@ -1,0 +1,90 @@
+[
+  {
+    "step_id": "f1466822-085e-4f7e-81f5-c46a97da7e8f:line_1:block_0",
+    "ordinal": 0,
+    "kind": "system_event",
+    "actor": "system",
+    "tool_call_id": null,
+    "tool_name": null,
+    "text": null,
+    "is_error": null,
+    "warnings": []
+  },
+  {
+    "step_id": "f1466822-085e-4f7e-81f5-c46a97da7e8f:line_2:block_0",
+    "ordinal": 1,
+    "kind": "assistant_text",
+    "actor": "assistant",
+    "tool_call_id": null,
+    "tool_name": null,
+    "text": "Давай посмотрю на задание.",
+    "is_error": null,
+    "warnings": []
+  },
+  {
+    "step_id": "f1466822-085e-4f7e-81f5-c46a97da7e8f:line_3:block_0",
+    "ordinal": 2,
+    "kind": "tool_call",
+    "actor": "assistant",
+    "tool_call_id": "toolu_013vNCMZekAjKMfvDcUTAPmn",
+    "tool_name": "ToolSearch",
+    "text": null,
+    "is_error": null,
+    "warnings": []
+  },
+  {
+    "step_id": "f1466822-085e-4f7e-81f5-c46a97da7e8f:line_4:block_0",
+    "ordinal": 3,
+    "kind": "tool_result",
+    "actor": "tool",
+    "tool_call_id": "toolu_013vNCMZekAjKMfvDcUTAPmn",
+    "tool_name": "ToolSearch",
+    "text": "{\"type\": \"tool_reference\", \"tool_name\": \"WebFetch\"}",
+    "is_error": null,
+    "warnings": []
+  },
+  {
+    "step_id": "f1466822-085e-4f7e-81f5-c46a97da7e8f:line_5:block_0",
+    "ordinal": 4,
+    "kind": "system_event",
+    "actor": "system",
+    "tool_call_id": null,
+    "tool_name": null,
+    "text": null,
+    "is_error": null,
+    "warnings": []
+  },
+  {
+    "step_id": "f1466822-085e-4f7e-81f5-c46a97da7e8f:line_6:block_0",
+    "ordinal": 5,
+    "kind": "tool_call",
+    "actor": "assistant",
+    "tool_call_id": "toolu_01A2R2Ne35542qiuNHaDJpQt",
+    "tool_name": "WebFetch",
+    "text": null,
+    "is_error": null,
+    "warnings": []
+  },
+  {
+    "step_id": "f1466822-085e-4f7e-81f5-c46a97da7e8f:line_7:block_0",
+    "ordinal": 6,
+    "kind": "tool_result",
+    "actor": "tool",
+    "tool_call_id": "toolu_01A2R2Ne35542qiuNHaDJpQt",
+    "tool_name": "WebFetch",
+    "text": "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.\n\nNote: The user's next message may contain a correction or preference. Pay close attention — if they explain what went wrong or how they'd prefer you to work, consider saving that to memory for future sessions.",
+    "is_error": true,
+    "warnings": []
+  },
+  {
+    "step_id": "f1466822-085e-4f7e-81f5-c46a97da7e8f:line_8:block_0",
+    "ordinal": 7,
+    "kind": "human_message",
+    "actor": "system",
+    "tool_call_id": null,
+    "tool_name": null,
+    "text": "[Request interrupted by user for tool use]",
+    "is_error": null,
+    "warnings": []
+  }
+]

@@ -16,7 +16,7 @@ from analysis.presentation import CATEGORY
 from schemas import (Actor, AnalysisStatus, Coverage, Finding, Metric, Provenance,
                      Recommendation, Report, SourceRef, Step, StepKind)
 
-PARSER_VERSION = "claude-parser-integrated-v1"
+PARSER_VERSION = "claude-parser-integrated-v2"
 DETECTOR_VERSION = "team-detectors-v2"
 SECRET_KEY = re.compile(r"password|secret|token|api[_-]?key", re.I)
 
@@ -44,6 +44,14 @@ def to_steps(parsed: dict, session_id: str) -> list[Step]:
                  StepKind.tool_call: Actor.assistant, StepKind.tool_result: Actor.tool}.get(kind, Actor.system)
         if s.get("synthetic"):
             actor = Actor.system
+        step_warnings = list(s.get("warnings", []))
+        known_system = {"system", "mode", "permission-mode", "file-history-snapshot", "attachment",
+                        "progress", "summary", "ai-title", "queue-operation", "last-prompt", "custom-title",
+                        "thinking", "assistant_empty", "user_empty"}
+        if s["kind"] == "other" and (step_warnings or (s.get("raw") or "").split(":")[0] not in known_system):
+            kind, actor = StepKind.unknown, Actor.unknown
+            if not step_warnings:
+                step_warnings.append("unknown_event_type")
         text = None if s.get("raw") == "thinking" else s.get("text")
         timestamp = None
         if s.get("ts") is not None:
@@ -56,14 +64,14 @@ def to_steps(parsed: dict, session_id: str) -> list[Step]:
         result.append(Step(
             step_id=step_id(session_id, s["id"]), session_id=session_id, ordinal=s["id"] - 1,
             source=SourceRef(source_line=s["line"], block_index=s.get("blockIndex", 0),
-                             source_event_id=s.get("uuid")),
+                             source_event_id=s.get("uuid"), source_message_id=s.get("messageId")),
             parent_event_id=s.get("parentUuid"), branch_id=s.get("agentId") or ("sidechain" if s.get("sidechain") else "main"),
             timestamp=timestamp, kind=kind, actor=actor, tool_call_id=s.get("toolUseId"),
             tool_name=s.get("tool"), arguments=clean(args) if isinstance(args, dict) else None,
             text=clean(text), text_truncated=shortened,
             is_error=s.get("isError") if kind == StepKind.tool_result else None,
-            usage=s.get("usage"), result_metadata=clean(s.get("result")),
-            warnings=["Текст сокращён парсером; исходный файл сохранён."] if shortened else [],
+            usage_ref=s.get("usageRef"), usage=s.get("usage"), result_metadata=clean(s.get("result")),
+            warnings=step_warnings + (["Текст сокращён парсером; исходный файл сохранён."] if shortened else []),
         ))
     return result
 
@@ -180,11 +188,18 @@ def build_report(raw: dict, *, analysis_id: str, session_id: str, llm_enabled: b
     ]
     for key, label, unit in definitions:
         value = kpi.get(key)
+        usage_summary = meta.get("usageSummary", {})
+        usage_fields = {"tokensIn": "input_tokens", "tokensOut": "output_tokens",
+                        "cacheRead": "cache_read_input_tokens", "cacheWrite": "cache_creation_input_tokens"}
+        if key in usage_fields and usage_summary:
+            value = usage_summary.get(usage_fields[key])
         if unit == "tokens" and not raw.get("census", {}).get("stepsWithUsage"):
             value = None
         if key == "durationMin" and raw.get("census", {}).get("stepsWithTime", 0) < 2:
             value = None
         limits = ["Приблизительная оценка по таблице тарифов в коде, не сумма списания."] if key == "cost" else []
+        if key in usage_fields or key == "cost":
+            limits.extend(usage_summary.get("limitations", []))
         if key == "cost" and kpi.get("costPartial"):
             limits.append("Для части моделей стоимость неизвестна.")
         metrics.append(Metric(key=key, label=label, value=value, unit=unit,
