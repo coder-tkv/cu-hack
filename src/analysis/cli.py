@@ -61,6 +61,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"        шаги: {f['stepIds'][:8]}")
             for rule in f["severityRules"][:3]:
                 print(f"        · {rule}")
+            for ep in (f.get("episodes") or [])[:3]:
+                print(f"        эпизод: {ep['title'][:90]} — шаги {ep['stepIds'][:4]}")
+            if f.get("episodeCount", 0) > 3:
+                print(f"        …и ещё {f['episodeCount'] - 3} эпизодов")
 
     if report["recommendations"]:
         print(f"\nрекомендаций: {len(report['recommendations'])}")

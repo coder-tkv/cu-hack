@@ -11,6 +11,13 @@
 
 from __future__ import annotations
 
+from .detectors.util import plural
+
+
+def _times(n: int) -> str:
+    return plural(n, ("раз", "раза", "раз"))
+
+
 BAND_HIGH = "высокая"
 BAND_MEDIUM = "средняя"
 BAND_LOW = "низкая"
@@ -35,7 +42,7 @@ def evidence_strength(ftype: str) -> str:
     return "direct" if ftype in DIRECT_EVIDENCE else "indirect"
 
 
-def _rules_for(f: dict) -> list[str]:
+def rules_for(f: dict) -> list[str]:
     """Человекочитаемые правила, сработавшие на этой находке."""
     t = f.get("type")
     m = f.get("metrics") or {}
@@ -43,7 +50,8 @@ def _rules_for(f: dict) -> list[str]:
     rules: list[str] = []
 
     if t in ("repeated_call", "similar_call"):
-        rules.append(f"вызов повторён {m.get('repeats')} раза")
+        n = m.get("repeats") or 0
+        rules.append(f"вызов повторён {n} {_times(n)}")
         if m.get("mutatingBetween") == 0:
             rules.append("в доступных событиях между попытками не обнаружено правок файлов")
         else:
@@ -57,7 +65,8 @@ def _rules_for(f: dict) -> list[str]:
         if m.get("compactionsBetween"):
             rules.append("между повторами сжимался контекст — агент мог потерять прошлый результат")
     elif t == "retry_loop":
-        rules.append(f"один и тот же вызов падал {m.get('attempts')} раза")
+        n = m.get("attempts") or 0
+        rules.append(f"один и тот же вызов падал {n} {_times(n)}")
         rules.append("причина отказа не менялась" if m.get("sameError") else "ошибки отличались")
     elif t == "repeated_error":
         rules.append(f"одна ошибка в {m.get('occurrences')} вызовах")
@@ -82,7 +91,8 @@ def _rules_for(f: dict) -> list[str]:
     elif t == "interruptions":
         rules.append(f"прерываний человеком: {m.get('interruptions')}")
     elif t == "repeated_instruction":
-        rules.append(f"одно указание повторено {m.get('repeats')} раза")
+        n = m.get("repeats") or 0
+        rules.append(f"одно указание повторено {n} {_times(n)}")
     elif t == "idle_gaps":
         rules.append(f"интервалов без записей: {m.get('gaps')}")
         rules.append("интервал мог уйти на ожидание человека или выполнение команды")
@@ -97,7 +107,7 @@ def classify(f: dict) -> dict:
     t = f.get("type")
     m = f.get("metrics") or {}
     e = f.get("evidence") or {}
-    rules = _rules_for(f)
+    rules = rules_for(f)
 
     band = BAND_LOW
 

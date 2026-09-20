@@ -216,3 +216,89 @@ class TestRealLogsReport(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMergedFindings(unittest.TestCase):
+    """Однотипные находки по одной цели склеиваются в одну со списком эпизодов."""
+
+    def _log_with_episodes(self, episodes: int = 3, per_episode: int = 3) -> str:
+        lines = [human_line("поработай", 0)]
+        t = 1
+        for ep in range(episodes):
+            for i in range(per_episode):
+                lines += [call_line("Bash", {"command": "docker compose up -d"}, f"c{ep}_{i}", t),
+                          result_line(f"c{ep}_{i}", "Error: port is already allocated", t + 1, is_error=True)]
+                t += 2
+            for j in range(12):  # разрыв, чтобы эпизоды не слиплись в один кластер
+                lines += [call_line("Read", {"file_path": f"/p/f{ep}_{j}.ts"}, f"r{ep}_{j}", t),
+                          result_line(f"r{ep}_{j}", "ok", t + 1)]
+                t += 2
+        return "\n".join(lines)
+
+    def test_same_target_becomes_one_finding(self):
+        report = analyze_log(self._log_with_episodes())
+        repeats = [f for f in report["findings"] if f["type"] == "repeated_call"]
+        self.assertEqual(len(repeats), 1, "три эпизода одного вызова — одна находка")
+        f = repeats[0]
+        self.assertEqual(f["episodeCount"], 3)
+        self.assertEqual(f["metrics"]["repeats"], 9)
+        self.assertIn("эпизодах", f["title"])
+
+    def test_each_episode_keeps_its_own_evidence(self):
+        f = next(x for x in analyze_log(self._log_with_episodes())["findings"] if x["type"] == "repeated_call")
+        for ep in f["episodes"]:
+            self.assertTrue(ep["callStepIds"], "эпизод без ссылок на шаги нельзя проверить")
+            self.assertTrue(ep["evidence"])
+            self.assertTrue(set(ep["callStepIds"]).issubset(set(ep["stepIds"])))
+
+    def test_different_targets_stay_separate(self):
+        lines = [human_line("поработай", 0)]
+        t = 1
+        for cmd in ("npm test", "docker compose up -d"):
+            for i in range(3):
+                lines += [call_line("Bash", {"command": cmd}, f"{cmd[:3]}{i}", t),
+                          result_line(f"{cmd[:3]}{i}", "Error: boom", t + 1, is_error=True)]
+                t += 2
+        repeats = [f for f in analyze_log("\n".join(lines))["findings"] if f["type"] == "repeated_call"]
+        self.assertEqual(len(repeats), 2, "разные команды склеивать нельзя")
+
+    def test_merged_is_not_weaker_than_its_episodes(self):
+        f = next(x for x in analyze_log(self._log_with_episodes())["findings"] if x["type"] == "repeated_call")
+        self.assertGreaterEqual(f["severity"], max(ep["severity"] for ep in f["episodes"]))
+        self.assertIn("эпизодов в сессии: 3", f["severityRules"])
+
+    def test_session_level_findings_untouched(self):
+        log = "\n".join(human_line("[Request interrupted by user]", i) for i in range(3))
+        f = next(x for x in analyze_log(log)["findings"] if x["type"] == "interruptions")
+        self.assertNotIn("episodes", f)
+
+    def test_merged_finding_still_has_recommendation(self):
+        report = analyze_log(self._log_with_episodes())
+        rec_ids = {r["id"] for r in report["recommendations"]}
+        for f in report["findings"]:
+            self.assertIn(f["recommendationId"], rec_ids)
+
+    def _churn_log(self, files: int) -> str:
+        lines = [human_line("правь", 0)]
+        t = 1
+        for n in range(files):
+            for i in range(4):
+                lines += [call_line("Edit", {"file_path": f"/p/file{n}.ts",
+                                             "old_string": f"v{i}", "new_string": f"v{i + 1}"}, f"e{n}_{i}", t),
+                          result_line(f"e{n}_{i}", "ok", t + 1)]
+                t += 2
+        return "\n".join(lines)
+
+    def test_few_per_file_findings_stay_separate(self):
+        findings = [f for f in analyze_log(self._churn_log(3))["findings"] if f["type"] == "file_churn"]
+        self.assertEqual(len(findings), 3, "на коротком логе три файла показываем отдельно")
+        self.assertTrue(all("episodes" not in f for f in findings))
+
+    def test_many_per_file_findings_are_merged(self):
+        findings = [f for f in analyze_log(self._churn_log(6))["findings"] if f["type"] == "file_churn"]
+        self.assertEqual(len(findings), 1, "шесть файлов сворачиваем в одну находку")
+        f = findings[0]
+        self.assertEqual(f["episodeCount"], 6)
+        self.assertEqual(f["metrics"]["edits"], 24)
+        for ep in f["episodes"]:
+            self.assertTrue(ep["evidence"]["filePath"], "в эпизоде должен остаться конкретный файл")

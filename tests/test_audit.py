@@ -46,7 +46,42 @@ class Audit:
         where = f"{self.case}/{f['type']}/{f['id']}"
         handler = getattr(self, "_" + f["type"], None)
         self.t.assertIsNotNone(handler, f"{where}: для типа находки нет проверки в аудиторе")
-        handler(f, where)
+        if f.get("episodes"):
+            self._check_merged(f, where, handler)
+        else:
+            handler(f, where)
+
+    def _check_merged(self, f: dict, where: str, handler) -> None:
+        """Склеенную находку проверяем поэпизодно: каждый эпизод обязан держаться сам."""
+        episodes = f["episodes"]
+        self.t.assertGreater(len(episodes), 1, f"{where}: склейка из одного эпизода")
+        union = set()
+        for i, ep in enumerate(episodes):
+            self.t.assertTrue(ep.get("evidence"), f"{where}: эпизод {i} без доказательств")
+            handler({
+                "type": f["type"],
+                "id": f"{f['id']}e{i}",
+                "title": ep["title"],
+                "metrics": ep["metrics"],
+                "evidence": ep["evidence"],
+                "stepIds": ep["stepIds"],
+            }, f"{where}/эпизод{i}")
+            union.update(ep["stepIds"])
+        self.t.assertTrue(set(f["stepIds"]).issubset(union), f"{where}: ссылки вне эпизодов")
+        self.t.assertEqual(f["episodeCount"], len(episodes) if not f.get("episodesTruncated") else f["episodeCount"],
+                           f"{where}: врёт число эпизодов")
+        self.t.assertEqual(f["metrics"].get("episodes"), f["episodeCount"], f"{where}: metrics.episodes не совпадает")
+        if not f.get("episodesTruncated"):
+            for field in ("repeats", "attempts"):
+                parts = [ep["metrics"].get(field) for ep in episodes if isinstance(ep["metrics"].get(field), int)]
+                if parts:
+                    self.t.assertEqual(sum(parts), f["metrics"][field], f"{where}: сумма {field} не сходится")
+        self.t.assertGreaterEqual(f["severity"], max(ep["severity"] for ep in episodes),
+                                  f"{where}: склейка оценена ниже своего сильнейшего эпизода")
+        if f["type"] in ("repeated_call", "similar_call") and f["metrics"].get("mutatingBetween"):
+            self.t.assertNotIn("без изменений", f["title"],
+                               f"{where}: заголовок обещает отсутствие правок, а метрика говорит обратное")
+        self.t.assertIn(str(f["episodeCount"]), f["title"], f"{where}: в заголовке не видно числа эпизодов")
 
     # --- повторы -------------------------------------------------------
     def _repeated_call(self, f, where):

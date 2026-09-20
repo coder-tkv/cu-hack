@@ -7,6 +7,7 @@ run_all(steps) -> findings[], отсортированные по значимо
 
 from __future__ import annotations
 
+from ..merge import merge_findings
 from ..severity import classify, sort_key
 from .edits import detect_edit_churn
 from .failures import detect_failures
@@ -74,7 +75,8 @@ def run_all(steps: list[dict]) -> tuple[list[dict], list[str]]:
             f["informational"] = band["informational"]
             findings.append(f)
 
-    findings.sort(key=sort_key)
+    # однотипные находки по одной цели — это одна проблема в нескольких местах
+    findings = merge_findings(findings)
     for i, f in enumerate(findings, start=1):
         f["id"] = f"f{i}"
     return findings, warnings
