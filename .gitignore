@@ -1,21 +1,36 @@
+# Python
 .DS_Store
-.venv/
 __pycache__/
 *.py[cod]
 *.egg-info/
+.venv/
+venv/
+
+# Секреты и локальные настройки
 .env
 .env.*
 !.env.example
 !.env.template
+src/.env
+*.env.local
+
+# Данные рантайма, логи и отчёты
+src/data/
 data/
 output/
 raw-logs/
-logs.zip
-.idea/
-.pytest_cache/
-.ruff_cache/
-# Логи сессий и производные: содержат код, пути и возможные секреты
 logs/
 *.jsonl
+logs.zip
 report.json
 steps.json
+
+# Окружение разработчика
+.idea/
+.vscode/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
