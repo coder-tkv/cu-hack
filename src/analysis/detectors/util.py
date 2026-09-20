@@ -19,10 +19,14 @@ def norm(s: Any) -> str:
 
 
 def norm_command(cmd: Any) -> str:
-    """Команду сравниваем без мусора: кавычки, лишние пробелы, cd в начале."""
-    t = norm(cmd)
-    t = re.sub(r"^cd\s+\S+\s*(&&|;)\s*", "", t)
-    return t.replace('"', "").replace("'", "").lower()
+    """Команду сравниваем без мусора: кавычки, лишние пробелы, регистр.
+
+    Каталог из `cd X && ...` НЕ выбрасываем: одна и та же команда в разных
+    каталогах — разные действия, и склеивать их в «повтор» нельзя.
+    """
+    t = norm(cmd).replace('"', "").replace("'", "").lower()
+    m = re.match(r"^cd\s+(\S+)\s*(?:&&|;)\s*(.*)$", t)
+    return f"cd={m.group(1)} {m.group(2)}" if m else t
 
 
 def args_key(step: dict) -> str:
@@ -39,7 +43,20 @@ def args_key(step: dict) -> str:
     if tool in ("Read", "Write"):
         return f"{tool}|{pick('file_path') or ''}"
     if tool in ("Edit", "MultiEdit"):
-        return f"{tool}|{pick('file_path') or ''}|{norm(pick('old_string') or '')}"
+        path = pick("file_path") or ""
+        edits = a.get("edits")
+        if isinstance(edits, list):
+            # у MultiEdit правки лежат в массиве; без него ключ был бы одинаков
+            # для любых правок одного файла
+            parts = [
+                f"{norm(e.get('old_string') or e.get('oldString') or '')}=>"
+                f"{norm(e.get('new_string') or e.get('newString') or '')}"
+                for e in edits
+                if isinstance(e, dict)
+            ]
+            return f"{tool}|{path}|" + "|".join(parts)[:500]
+        # разный new_string при одном old_string — разные правки, не повтор
+        return f"{tool}|{path}|{norm(pick('old_string') or '')}=>{norm(pick('new_string') or '')}"
     if tool in ("Grep", "Glob"):
         return f"{tool}|{pick('pattern') or ''}|{pick('path') or ''}"
     if tool in ("WebFetch", "WebSearch"):
@@ -96,6 +113,11 @@ def snippet(s: Any, limit: int = 200) -> str | None:
     return t if len(t) <= limit else t[:limit] + "…"
 
 
+_POSITIONAL_NUM = re.compile(
+    r"\b(?:lines?|col(?:umn)?s?|char|row|offset|position|pos|port)\b\s*[:=#]?\s*\d+",
+    re.IGNORECASE,
+)
+
 _ERR_HINT = re.compile(
     r"error|exception|fail|not found|cannot|no such|denied|refused|traceback|нет|ошибк",
     re.IGNORECASE,
@@ -110,7 +132,9 @@ def error_signature(text: Any) -> str:
     if not lines:
         return ""
     meaningful = next((l for l in lines if _ERR_HINT.search(l)), lines[0])
-    out = re.sub(r"\d+", "N", meaningful)
+    # Затирать все числа нельзя: HTTP 404 и HTTP 500 — разные ошибки, а
+    # «line 42» и «line 99» — одна. Нормализуем только позиционные числа.
+    out = _POSITIONAL_NUM.sub(lambda m: re.sub(r"\d+", "N", m.group(0)), meaningful)
     out = re.sub(r"[0-9a-f]{8,}", "HASH", out, flags=re.IGNORECASE)
     return norm(out)[:160].lower()
 

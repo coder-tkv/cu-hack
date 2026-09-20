@@ -116,13 +116,22 @@ class TestRepeated(unittest.TestCase):
         self.assertEqual(len(found), 1)
         self.assertEqual(len(found[0]["evidence"]["variants"]), 3)
 
-    def test_args_normalized_before_comparison(self):
+    def test_quoting_and_case_normalized_before_comparison(self):
         log = Log().human("x")
-        for i, cmd in enumerate(['cd /p && npm test', 'npm  test', 'NPM TEST']):
+        for i, cmd in enumerate(['npm test', 'npm  test', '"npm" TEST']):
             log.call("Bash", {"command": cmd}, f"c{i}")
             log.result(f"c{i}", "same")
         found = [f for f in detect_repeated_calls(log.steps()) if f["type"] == "repeated_call"]
-        self.assertEqual(len(found), 1, "одна и та же команда в разном написании — это повтор")
+        self.assertEqual(len(found), 1, "одна команда в разном написании — это повтор")
+
+    def test_same_command_in_different_directories_is_not_a_repeat(self):
+        """cd A && npm test и cd B && npm test — разные действия."""
+        log = Log().human("x")
+        for i, d in enumerate(["/project-a", "/project-b", "/project-c"]):
+            log.call("Bash", {"command": f"cd {d} && npm test"}, f"c{i}")
+            log.result(f"c{i}", "FAIL", is_error=True)
+        found = [f for f in detect_repeated_calls(log.steps()) if f["type"] == "repeated_call"]
+        self.assertEqual(found, [], "разные каталоги нельзя считать повтором одного действия")
 
 
 class TestFailures(unittest.TestCase):

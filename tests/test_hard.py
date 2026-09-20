@@ -492,3 +492,98 @@ class TestPerformance(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# --------------------------------------------------------------------------
+# 6. Ловушки из внешнего разбора (docs/detector-bugs.md, tests/detectors.test.js)
+# --------------------------------------------------------------------------
+class TestExternalReviewTraps(unittest.TestCase):
+    """Семь сценариев, найденных сторонними тестами к JS-прототипу.
+    Здесь они закреплены на том коде, который мы поставляем."""
+
+    def test_empty_error_text_is_not_same_error(self):
+        """Баг 1: нет текста ошибки — значит мы не знаем, та же она или нет."""
+        lines = []
+        for i in range(2):
+            lines += [call_line("Bash", {"command": "deploy"}, f"c{i}", i * 2),
+                      result_line(f"c{i}", "", i * 2 + 1, is_error=True)]
+        f = next(x for x in analyze_log("\n".join(lines))["findings"] if x["type"] == "retry_loop")
+        self.assertFalse(f["metrics"]["sameError"], "пустая подпись — не совпадение ошибок")
+        self.assertNotIn("с той же ошибкой", f["title"])
+
+    def test_different_directories_are_different_actions(self):
+        """Баг 2: cd A && npm test и cd B && npm test — не повтор."""
+        self.assertNotEqual(
+            args_key({"tool": "Bash", "args": {"command": "cd /a && npm test"}}),
+            args_key({"tool": "Bash", "args": {"command": "cd /b && npm test"}}),
+        )
+
+    def test_http_codes_are_not_collapsed(self):
+        """Баг 3: 404, 500 и 503 — разные ошибки."""
+        from analysis.detectors.util import error_signature
+
+        sigs = {error_signature(f"Error: HTTP {code} from /x") for code in (404, 500, 503)}
+        self.assertEqual(len(sigs), 3)
+
+    def test_line_numbers_are_still_collapsed(self):
+        """Обратная сторона правки: номера строк по-прежнему нормализуются."""
+        from analysis.detectors.util import error_signature
+
+        sigs = {error_signature(f"SyntaxError: unexpected token at line {n}") for n in (7, 42, 99)}
+        self.assertEqual(len(sigs), 1)
+
+    def test_two_loops_do_not_add_a_third_finding(self):
+        """Баг 4: два цикла с одной ошибкой не должны давать ещё и repeated_error."""
+        lines = []
+        for i, (tool, args) in enumerate([
+            ("Read", {"file_path": "/a"}), ("Read", {"file_path": "/a"}),
+            ("Write", {"file_path": "/a", "content": "x"}), ("Write", {"file_path": "/a", "content": "x"}),
+        ]):
+            lines += [call_line(tool, args, f"t{i}", i * 2),
+                      result_line(f"t{i}", "EACCES: permission denied", i * 2 + 1, is_error=True)]
+        types = [f["type"] for f in analyze_log("\n".join(lines))["findings"]]
+        self.assertEqual(types.count("retry_loop"), 2)
+        self.assertEqual(types.count("repeated_error"), 0, "тот же вывод не должен идти дважды")
+
+    def test_three_approaches_one_wall_still_reported(self):
+        """Но три разных подхода в одну стену — это отдельный вывод, он остаётся."""
+        lines = []
+        for i, cmd in enumerate(["pytest", "python -m pytest", "make test"]):
+            lines += [call_line("Bash", {"command": cmd}, f"c{i}", i * 2),
+                      result_line(f"c{i}", "ModuleNotFoundError: No module named 'app'", i * 2 + 1, is_error=True)]
+        types = [f["type"] for f in analyze_log("\n".join(lines))["findings"]]
+        self.assertIn("repeated_error", types)
+
+    def test_api_error_on_assistant_step_is_found(self):
+        """Баг 5: ошибка API приходит на assistant-шаге, subtype в raw не попадает."""
+        lines = [json.dumps({"type": "assistant", "subtype": "api_error", "timestamp": ts(i),
+                             "message": {"id": f"e{i}", "role": "assistant", "model": "claude-opus-5",
+                                         "content": [{"type": "text", "text": "API Error: 529 Overloaded"}]}})
+                 for i in range(3)]
+        types = [f["type"] for f in analyze_log("\n".join(lines))["findings"]]
+        self.assertIn("api_errors", types)
+
+    def test_cluster_members_are_not_changes_between_attempts(self):
+        """Баг 6: сами повторы Edit нельзя считать «правками между попытками»."""
+        lines = []
+        for i in range(3):
+            lines += [call_line("Edit", {"file_path": "/a.ts", "old_string": "A", "new_string": "B"}, f"e{i}", i * 2),
+                      result_line(f"e{i}", "ok", i * 2 + 1)]
+        f = next(x for x in analyze_log("\n".join(lines))["findings"] if x["type"] == "repeated_call")
+        self.assertEqual(f["metrics"]["mutatingBetween"], 0)
+        self.assertIn("без изменений", f["title"])
+
+    def test_edit_with_different_new_string_is_not_a_repeat(self):
+        """Баг 7: один old_string, разный new_string — разные правки."""
+        keys = {args_key({"tool": "Edit", "args": {"file_path": "/a.ts", "old_string": "A", "new_string": n}})
+                for n in ("B", "C", "D")}
+        self.assertEqual(len(keys), 3)
+
+    def test_multiedit_key_uses_its_edits(self):
+        """Найдено дополнительно: у MultiEdit правки в массиве edits, и без них
+        любые правки одного файла склеивались в один ключ."""
+        a = args_key({"tool": "MultiEdit", "args": {"file_path": "/a.ts",
+                                                    "edits": [{"old_string": "A", "new_string": "B"}]}})
+        b = args_key({"tool": "MultiEdit", "args": {"file_path": "/a.ts",
+                                                    "edits": [{"old_string": "X", "new_string": "Y"}]}})
+        self.assertNotEqual(a, b)

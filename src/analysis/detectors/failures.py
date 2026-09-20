@@ -35,7 +35,8 @@ def detect_failures(steps: list[dict]) -> list[dict]:
     for key, lst in by_key.items():
         if len(lst) < 2:
             continue
-        same_sig = all(f["sig"] == lst[0]["sig"] for f in lst)
+        # пустая подпись означает «текста ошибки нет», а не «ошибка та же»
+        same_sig = bool(lst[0]["sig"]) and all(f["sig"] == lst[0]["sig"] for f in lst)
         tool = lst[0]["call"].get("tool") or "Инструмент"
         out.append(
             finding(
@@ -70,12 +71,18 @@ def detect_failures(steps: list[dict]) -> list[dict]:
     for f in failed:
         if f["sig"]:
             by_sig.setdefault(f["sig"], []).append(f)
+    loop_keys = {k for k, v in by_key.items() if len(v) >= 2}
     for sig, lst in by_sig.items():
         if len(lst) < 3:
             continue
         keys = {f["key"] for f in lst}
         if len(keys) < 2:
             continue  # это уже retry_loop
+        # если каждый ключ сам по себе цикл, retry_loop уже всё сказал: третью
+        # находку добавляем только когда подходов было три и больше
+        has_lone = any(f["key"] not in loop_keys for f in lst)
+        if not has_lone and len(keys) < 3:
+            continue
         out.append(
             finding(
                 "repeated_error",
@@ -136,7 +143,12 @@ def detect_failures(steps: list[dict]) -> list[dict]:
             )
 
     # (4) ошибки самого API — не вина агента, но объясняет потери времени
-    api_errors = [s for s in steps if isinstance(s.get("raw"), str) and "api_error" in s["raw"]]
+    api_errors = [
+        s for s in steps
+        if (isinstance(s.get("raw"), str) and "api_error" in s["raw"])
+        # у assistant-шага парсер ставит только isError, subtype в raw не попадает
+        or (s.get("isError") and isinstance(s.get("raw"), str) and s["raw"].startswith("assistant"))
+    ]
     if len(api_errors) >= 3:
         out.append(
             finding(

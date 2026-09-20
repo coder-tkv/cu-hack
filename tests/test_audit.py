@@ -155,7 +155,11 @@ class Audit:
 
     def _api_errors(self, f, where):
         for s in self._steps_of(f["stepIds"]):
-            self.t.assertIn("api_error", s.get("raw") or "", f"{where}: ссылка не на ошибку API")
+            raw = s.get("raw") or ""
+            # либо служебная строка system:api_error, либо assistant-шаг, помеченный
+            # ошибкой (у него парсер subtype в raw не сохраняет)
+            ok = "api_error" in raw or (s.get("isError") and raw.startswith("assistant"))
+            self.t.assertTrue(ok, f"{where}: шаг {s['id']} не похож на ошибку API (raw={raw})")
 
     # --- токены --------------------------------------------------------
     def _token_hotspot(self, f, where):
