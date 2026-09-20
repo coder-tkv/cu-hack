@@ -6,7 +6,11 @@ __pycache__/
 .env
 .env.*
 !.env.example
+!.env.template
 data/
 output/
 raw-logs/
 logs.zip
+.idea/
+.pytest_cache/
+.ruff_cache/
