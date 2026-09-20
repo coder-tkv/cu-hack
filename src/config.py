@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, PostgresDsn
@@ -30,20 +31,20 @@ class LoggingConfig(BaseModel):
         return logging.getLevelNamesMapping()[self.log_level.upper()]
 
 
-class RedisConfig(BaseModel):
-    host: str = "localhost"
-    port: int = 6379
-    max_connections: int = 20
-    db: int = 0
+class StorageConfig(BaseModel):
+    """Где лежат загруженные логи и экспорты. Не публичная статика."""
 
+    data_dir: Path = Path("data")
+    max_file_bytes: int = 50 * 1024 * 1024
+    max_line_bytes: int = 5 * 1024 * 1024
 
-class RedisNamespace(BaseModel):
-    example_key: str = 'example_key'
+    @property
+    def uploads_dir(self) -> Path:
+        return self.data_dir / "uploads"
 
-
-class RedisKeysConfig(BaseModel):
-    prefix: str = "my-redis"
-    namespace: RedisNamespace = RedisNamespace()
+    @property
+    def exports_dir(self) -> Path:
+        return self.data_dir / "exports"
 
 
 class DatabaseConfig(BaseModel):
@@ -71,8 +72,7 @@ class Settings(BaseSettings):
 
     run: RunConfig = RunConfig()
     logging: LoggingConfig = LoggingConfig()
-    redis: RedisConfig = RedisConfig()
-    redis_keys: RedisKeysConfig = RedisKeysConfig()
+    storage: StorageConfig = StorageConfig()
     db: DatabaseConfig
 
 
