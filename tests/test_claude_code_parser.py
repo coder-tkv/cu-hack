@@ -18,7 +18,7 @@ class ClaudeCodeParserTests(unittest.TestCase):
 
         steps = list(parse_claude_code_lines(lines))
 
-        self.assertEqual([step.kind for step in steps], [StepKind.ASSISTANT_TEXT, StepKind.TOOL_CALL])
+        self.assertEqual([step.kind for step in steps], [StepKind.assistant_text, StepKind.tool_call])
         self.assertEqual(steps[0].step_id, "s_7d9:line_1:block_0")
         self.assertEqual(steps[1].step_id, "s_7d9:line_1:block_1")
         self.assertEqual(steps[1].source.source_message_id, "msg-a")
@@ -33,8 +33,8 @@ class ClaudeCodeParserTests(unittest.TestCase):
 
         step = next(parse_claude_code_lines(lines))
 
-        self.assertEqual(step.kind, StepKind.TOOL_RESULT)
-        self.assertEqual(step.actor, Actor.TOOL)
+        self.assertEqual(step.kind, StepKind.tool_result)
+        self.assertEqual(step.actor, Actor.tool)
         self.assertTrue(step.is_error)
         self.assertEqual(step.tool_call_id, "tool-1")
 
@@ -59,11 +59,11 @@ class ClaudeCodeParserTests(unittest.TestCase):
         calls = {call.tool_call_id: call for call in link_tool_calls(steps)}
 
         self.assertEqual(calls["call-a"].result_step_ids, ["s-1:line_3:block_0"])
-        self.assertEqual(calls["call-a"].status, ToolCallStatus.ERROR)
+        self.assertEqual(calls["call-a"].status, ToolCallStatus.error)
         self.assertEqual(calls["call-b"].result_step_ids, ["s-1:line_5:block_0"])
-        self.assertEqual(calls["call-b"].status, ToolCallStatus.SUCCESS)
+        self.assertEqual(calls["call-b"].status, ToolCallStatus.success)
         self.assertTrue(calls["call-c"].unfinished)
-        self.assertEqual(calls["call-c"].status, ToolCallStatus.UNKNOWN)
+        self.assertEqual(calls["call-c"].status, ToolCallStatus.unknown)
 
     def test_real_claude_code_fixture(self) -> None:
         fixture = Path(__file__).parent / "fixtures" / "claude_code_real_excerpt.jsonl"
@@ -72,11 +72,12 @@ class ClaudeCodeParserTests(unittest.TestCase):
 
         self.assertEqual(len(steps), 8)
         self.assertEqual(steps[0].session_id, "f1466822-085e-4f7e-81f5-c46a97da7e8f")
-        self.assertEqual(steps[0].kind, StepKind.ASSISTANT_TEXT)
-        self.assertEqual(steps[2].kind, StepKind.TOOL_CALL)
+        self.assertEqual(steps[0].kind, StepKind.system_event)
+        self.assertIsNone(steps[0].text)  # internal thinking is never exposed
+        self.assertEqual(steps[2].kind, StepKind.tool_call)
         self.assertEqual(steps[2].tool_name, "ToolSearch")
-        self.assertEqual(steps[3].kind, StepKind.TOOL_RESULT)
-        self.assertEqual(steps[3].actor, Actor.TOOL)
+        self.assertEqual(steps[3].kind, StepKind.tool_result)
+        self.assertEqual(steps[3].actor, Actor.tool)
         self.assertEqual(steps[5].tool_name, "WebFetch")
         self.assertTrue(steps[6].is_error)
         self.assertEqual(steps[7].text, "[Request interrupted by user for tool use]")
@@ -109,7 +110,7 @@ class ClaudeCodeParserTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(steps[0].kind, StepKind.UNKNOWN)
+        self.assertEqual(steps[0].kind, StepKind.unknown)
         self.assertIn("invalid_content_block_type", steps[0].warnings)
         self.assertEqual(steps[1].text, "after")
         self.assertEqual(steps[1].ordinal, 1)
@@ -124,13 +125,31 @@ class ClaudeCodeParserTests(unittest.TestCase):
         steps = list(parse_claude_code_lines(lines))
 
         self.assertEqual([step.ordinal for step in steps], [0, 1, 2])
-        self.assertEqual(steps[0].kind, StepKind.UNKNOWN)
+        self.assertEqual(steps[0].kind, StepKind.unknown)
         self.assertIn("invalid_json", steps[0].warnings)
-        self.assertEqual(steps[1].kind, StepKind.UNKNOWN)
+        self.assertEqual(steps[1].kind, StepKind.unknown)
         self.assertIn("unknown_event_type", steps[1].warnings)
-        self.assertEqual(steps[2].kind, StepKind.HUMAN_MESSAGE)
+        self.assertEqual(steps[2].kind, StepKind.human_message)
         self.assertEqual(steps[2].text, "Hello")
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LinkIsolationTests(unittest.TestCase):
+    def test_result_cannot_be_linked_across_session_or_backwards_in_time(self):
+        rows = [
+            {"type": "assistant", "sessionId": "a", "message": {"content": [{"type": "tool_use", "id": "c", "name": "Bash", "input": {}}]}},
+            {"type": "user", "sessionId": "b", "message": {"content": [{"type": "tool_result", "tool_use_id": "c", "is_error": True}]}},
+            {"type": "assistant", "sessionId": "b", "message": {"content": [{"type": "tool_use", "id": "c", "name": "Bash", "input": {}}]}},
+        ]
+        calls = link_tool_calls(parse_claude_code_lines(json.dumps(r) for r in rows))
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(all(c.unfinished and c.status == ToolCallStatus.unknown for c in calls))
+
+    def test_explicit_server_session_id_takes_precedence(self):
+        steps = list(parse_claude_code_lines(['{"type":"user","sessionId":"client",'
+            '"message":{"content":"hello"}}'], session_id="server"))
+        self.assertEqual(steps[0].session_id, "server")
+        self.assertTrue(steps[0].step_id.startswith("server:"))

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 from config import settings
+import models  # noqa: F401  # регистрирует все модели в Base.metadata
 from models.base import Base
 
 # this is the Alembic Config object, which provides

@@ -1,0 +1,10 @@
+*
+!pyproject.toml
+!agent_review/
+!agent_review/**
+!examples/
+!examples/packet.json
+!tests/
+!tests/**
+**/__pycache__/
+**/*.pyc

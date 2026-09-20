@@ -1,74 +1,88 @@
-"""Shared schema primitives.
+"""Общие перечисления и версии контракта.
 
-The values in these enums are part of the frozen backend v1 contract.
+ВАЖНО: это единственное место, где заводятся строковые перечисления.
+Не дублируйте литералы в своих модулях, импортируйте отсюда.
 """
 
 from enum import StrEnum
 
-
-SCHEMA_VERSION = "v1"
+# Версия контракта отчёта. Меняем только по договорённости всей команды.
+SCHEMA_VERSION = "1"
 
 
 class StepKind(StrEnum):
-    HUMAN_MESSAGE = "human_message"
-    ASSISTANT_TEXT = "assistant_text"
-    TOOL_CALL = "tool_call"
-    TOOL_RESULT = "tool_result"
-    SYSTEM_EVENT = "system_event"
-    UNKNOWN = "unknown"
+    """Тип нормализованного шага истории."""
+
+    human_message = "human_message"
+    assistant_text = "assistant_text"
+    tool_call = "tool_call"
+    tool_result = "tool_result"
+    system_event = "system_event"
+    unknown = "unknown"
 
 
 class Actor(StrEnum):
-    HUMAN = "human"
-    ASSISTANT = "assistant"
-    TOOL = "tool"
-    SYSTEM = "system"
-    UNKNOWN = "unknown"
+    """Кто является источником шага."""
+
+    human = "human"
+    assistant = "assistant"
+    tool = "tool"
+    system = "system"
+    unknown = "unknown"
 
 
 class ToolCallStatus(StrEnum):
-    SUCCESS = "success"
-    ERROR = "error"
-    UNKNOWN = "unknown"
+    """Статус пары вызов/результат. Отсутствие результата -> unknown."""
+
+    success = "success"
+    error = "error"
+    unknown = "unknown"
 
 
 class AnalysisStatus(StrEnum):
-    QUEUED = "queued"
-    PARSING = "parsing"
-    ANALYZING = "analyzing"
-    EXPLAINING = "explaining"
-    ASSEMBLING = "assembling"
-    COMPLETE = "complete"
-    PARTIAL = "partial"
-    INSUFFICIENT_DATA = "insufficient_data"
-    FAILED = "failed"
-    INTERRUPTED = "interrupted"
+    """Состояние задачи анализа (оно же общий статус отчёта)."""
+
+    queued = "queued"
+    parsing = "parsing"
+    analyzing = "analyzing"
+    explaining = "explaining"
+    assembling = "assembling"
+    complete = "complete"
+    partial = "partial"
+    insufficient_data = "insufficient_data"
+    failed = "failed"
+    interrupted = "interrupted"
 
 
-TERMINAL_STATUSES = frozenset(
+TERMINAL_STATUSES: frozenset[AnalysisStatus] = frozenset(
     {
-        AnalysisStatus.COMPLETE,
-        AnalysisStatus.PARTIAL,
-        AnalysisStatus.INSUFFICIENT_DATA,
-        AnalysisStatus.FAILED,
-        AnalysisStatus.INTERRUPTED,
-    }
-)
-RUNNING_STATUSES = frozenset(
-    {
-        AnalysisStatus.PARSING,
-        AnalysisStatus.ANALYZING,
-        AnalysisStatus.EXPLAINING,
-        AnalysisStatus.ASSEMBLING,
+        AnalysisStatus.complete,
+        AnalysisStatus.partial,
+        AnalysisStatus.insufficient_data,
+        AnalysisStatus.failed,
+        AnalysisStatus.interrupted,
     }
 )
 
-
-class Severity(StrEnum):
-    HIGH = "high"
-    MEDIUM = "medium"
-    LOW = "low"
+RUNNING_STATUSES: frozenset[AnalysisStatus] = frozenset(
+    {
+        AnalysisStatus.parsing,
+        AnalysisStatus.analyzing,
+        AnalysisStatus.explaining,
+        AnalysisStatus.assembling,
+    }
+)
 
 
 class LogFormat(StrEnum):
-    CLAUDE_CODE = "claude_code"
+    """Поддерживаемые входные форматы. Codex в MVP вырезан."""
+
+    claude_code = "claude_code"
+
+
+class Severity(StrEnum):
+    """Ранг находки. Определяет backend, не модель."""
+
+    high = "high"
+    medium = "medium"
+    low = "low"

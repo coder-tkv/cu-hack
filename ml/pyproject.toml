@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cu-agent-review"
+version = "0.2.0"
+description = "Small evidence-based LLM reviewer for coding-agent sessions"
+requires-python = ">=3.11"
+dependencies = ["openai==3.6.0", "pydantic==2.13.5"]
+
+[project.scripts]
+agent-review = "agent_review.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["agent_review*"]
+
+[tool.setuptools.package-data]
+agent_review = ["prompt.md"]

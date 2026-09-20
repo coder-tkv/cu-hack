@@ -1,40 +1,36 @@
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
-from reports import (
-    build_report,
-    export_claude_generated_md,
-    export_report_json,
-    export_report_md,
-)
+from analysis import analyze_log
+from reports import build_report, export_claude_generated_md, export_report_json, export_report_md
 from reports.exporters import ARTIFACT_ALLOWLIST
+from schemas import Report
 
 
 class ReportInterfaceTests(unittest.TestCase):
-    def test_export_artifacts_are_allowlisted(self) -> None:
-        self.assertEqual(
-            ARTIFACT_ALLOWLIST,
-            {"report.md", "report.json", "CLAUDE.generated.md"},
-        )
+    def make_report(self):
+        return build_report(analyze_log('{"unrelated":1}'), analysis_id="a-1",
+                            session_id="s-1", llm_enabled=False)
 
-    def test_builder_interface_exists(self) -> None:
-        with self.assertRaises(NotImplementedError):
-            build_report(
-                analysis_id="a-1",
-                session_id="s-1",
-                status="assembling",
-                session_info=None,
-            )
+    def test_export_artifacts_are_allowlisted(self):
+        self.assertEqual(set(ARTIFACT_ALLOWLIST), {"report.md", "report.json", "CLAUDE.generated.md"})
 
-    def test_exporter_interfaces_exist(self) -> None:
-        for exporter in (
-            export_report_md,
-            export_report_json,
-            export_claude_generated_md,
-        ):
-            with self.subTest(exporter=exporter.__name__):
-                with self.assertRaises(NotImplementedError):
-                    exporter({}, "/tmp/report")
+    def test_builder_returns_valid_report(self):
+        report = self.make_report()
+        self.assertEqual(Report.model_validate_json(report.model_dump_json()), report)
+        self.assertEqual(report.status, "insufficient_data")
 
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_exporters_write_actual_report(self):
+        report = self.make_report()
+        with tempfile.TemporaryDirectory() as folder:
+            for exporter, name in ((export_report_json, "report.json"),
+                                   (export_report_md, "report.md"),
+                                   (export_claude_generated_md, "CLAUDE.generated.md")):
+                path = exporter(report, Path(folder) / "nested" / name)
+                self.assertTrue(path.read_text())
+                if name.endswith(".json"):
+                    self.assertEqual(json.loads(path.read_text()), report.model_dump(mode="json"))
+                elif name == "report.md":
+                    self.assertIn(report.summary, path.read_text())

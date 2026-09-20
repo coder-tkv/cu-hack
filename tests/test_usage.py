@@ -89,3 +89,41 @@ class UsageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class IntegratedUsageTests(unittest.TestCase):
+    def test_api_uses_final_usage_once_and_keeps_missing_category_unknown(self):
+        from analysis import analyze_log
+        from reports import build_report
+        from reports.builder import to_steps
+        import json
+        rows = [{"type": "assistant", "sessionId": "s", "requestId": "req",
+                 "message": {"id": "msg", "content": [{"type": "text", "text": "working"}],
+                             "usage": {"input_tokens": 3, "output_tokens": output},
+                             "stop_reason": stop}}
+                for output, stop in [(1, None), (9, "tool_use"), (2, None)]]
+        raw = analyze_log("\n".join(json.dumps(row) for row in rows))
+        self.assertEqual(raw["kpi"]["tokensOut"], 9)
+        steps = to_steps(raw, "server-session")
+        self.assertEqual(sum(s.usage is not None for s in steps), 1)
+        self.assertTrue(all(s.usage_ref == "req" for s in steps))
+        report = build_report(raw, analysis_id="a", session_id="s", llm_enabled=False)
+        metrics = {m.key: m for m in report.metrics}
+        self.assertEqual(metrics["tokensOut"].value, 9)
+        self.assertIsNone(metrics["cacheRead"].value)
+        self.assertTrue(metrics["tokensOut"].limitations)
+
+    def test_identical_request_ids_in_different_sessions_are_not_merged(self):
+        import json
+        lines = [json.dumps({"sessionId": sid, "requestId": "req", "message": {
+            "usage": {"input_tokens": 3}}}) for sid in ("a", "b")]
+        extraction = extract_usage_records(lines)
+        self.assertEqual(len(extraction.records), 2)
+        self.assertEqual(summarize_usage(extraction.records).input_tokens, 6)
+
+    def test_message_id_fallback_and_invalid_token_values(self):
+        extraction = extract_usage_records(['{"message":{"id":"m","usage":'
+            '{"input_tokens":true,"output_tokens":-1,"cache_read_input_tokens":5}}}'])
+        self.assertEqual(extraction.records[0].request_id, "m")
+        self.assertIsNone(extraction.records[0].input_tokens)
+        self.assertIsNone(extraction.records[0].output_tokens)

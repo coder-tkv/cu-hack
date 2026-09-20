@@ -1,12 +1,21 @@
-# Python-generated files
+.DS_Store
+.venv/
 __pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
-
-# Virtual environments
-.venv
+*.py[cod]
+*.egg-info/
 .env
+.env.*
+!.env.example
+!.env.template
+data/
+output/
+raw-logs/
+logs.zip
 .idea/
+.pytest_cache/
+.ruff_cache/
+# Логи сессий и производные: содержат код, пути и возможные секреты
+logs/
+*.jsonl
+report.json
+steps.json

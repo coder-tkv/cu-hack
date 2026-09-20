@@ -1,6 +1,6 @@
 """Usage extraction for the original Claude Code agent.
 
-This module reads usage independently from parsing Steps. A Claude response can
+Usage can be extracted separately or collected during the shared parser pass. A Claude response can
 have several content blocks or streaming updates with the same request_id; its
 usage must be counted once, never once per block or Step.
 """
@@ -34,69 +34,74 @@ class UsageSummary(_UsageModel):
     limitations: list[str] = Field(default_factory=list)
 
 
-def extract_usage_records(lines: Iterable[str]) -> UsageExtraction:
-    """Read original-agent usage from raw JSONL lines and deduplicate request IDs.
+class UsageCollector:
+    """Accumulate already decoded events; the API never parses a file twice."""
 
-    Invalid or unrelated lines are ignored here: the parser owns their warnings.
-    A record without a request ID cannot be safely deduplicated, so it is not
-    included and is reported as a limitation instead of being guessed.
-    """
-    records: dict[str, UsageRecord] = {}
-    warnings: list[str] = []
+    def __init__(self):
+        self.records: dict[tuple[str, str], UsageRecord] = {}
+        self.warnings: list[str] = []
 
-    for source_line, raw_line in enumerate(lines, start=1):
-        try:
-            event = json.loads(raw_line)
-        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
-            continue
-        if not isinstance(event, dict):
-            continue
-
+    def add_event(self, event: dict, source_line: int) -> None:
         message = event.get("message")
-        if not isinstance(message, dict):
-            continue
-        usage = message.get("usage")
-        if not isinstance(usage, dict):
-            continue
-
-        request_id = (
-            _string(event.get("requestId"))
-            or _string(event.get("request_id"))
-            or _string(message.get("requestId"))
-            or _string(message.get("request_id"))
-        )
+        if not isinstance(message, dict) or not isinstance(message.get("usage"), dict):
+            return
+        usage = message["usage"]
+        request_id = usage_id(event)
         if request_id is None:
-            warnings.append(f"line_{source_line}: usage_without_request_id")
-            continue
-
+            if len(self.warnings) < 200:
+                self.warnings.append(f"line_{source_line}: usage_without_request_or_message_id")
+            return
+        cache = usage.get("cache_creation")
+        cache = {k: v for k, v in cache.items() if _non_negative_int(v) is not None} if isinstance(cache, dict) else None
         candidate = UsageRecord(
             request_id=request_id,
+            session_id=_string(event.get("sessionId")) or "unknown",
             message_id=_string(message.get("id")),
             model=_string(message.get("model")),
             input_tokens=_non_negative_int(usage.get("input_tokens")),
             output_tokens=_non_negative_int(usage.get("output_tokens")),
             cache_creation_input_tokens=_non_negative_int(usage.get("cache_creation_input_tokens")),
             cache_read_input_tokens=_non_negative_int(usage.get("cache_read_input_tokens")),
-            source_lines=[source_line],
-            step_ids=_step_ids_for_event(event, source_line),
+            cache_creation=cache,
+            source_lines=[source_line], step_ids=_step_ids_for_event(event, source_line),
             is_final=_is_final(message),
         )
+        key = candidate.session_id, request_id
+        existing = self.records.get(key)
+        self.records[key] = candidate if existing is None else _merge_duplicate(existing, candidate)
 
-        existing = records.get(request_id)
-        if existing is None:
-            records[request_id] = candidate
-        else:
-            records[request_id] = _merge_duplicate(existing, candidate)
+    def finish(self) -> UsageExtraction:
+        return UsageExtraction(records=list(self.records.values()), warnings=self.warnings)
 
-    return UsageExtraction(records=list(records.values()), warnings=warnings)
+
+def usage_id(event: dict) -> str | None:
+    message = event.get("message")
+    message = message if isinstance(message, dict) else {}
+    return (_string(event.get("requestId")) or _string(event.get("request_id"))
+            or _string(message.get("requestId")) or _string(message.get("request_id"))
+            or _string(message.get("id")))
+
+
+def extract_usage_records(lines: Iterable[str]) -> UsageExtraction:
+    """Convenience interface for usage-only callers; request ID or message ID is required."""
+    collector = UsageCollector()
+    for source_line, raw_line in enumerate(lines, start=1):
+        try:
+            event = json.loads(raw_line)
+        except (ValueError, TypeError, UnicodeDecodeError):
+            continue
+        if isinstance(event, dict):
+            collector.add_event(event, source_line)
+    return collector.finish()
 
 
 def summarize_usage(records: Iterable[UsageRecord]) -> UsageSummary:
     """Return token totals, deduplicating defensively by request_id once again."""
-    unique: dict[str, UsageRecord] = {}
+    unique: dict[tuple[str, str], UsageRecord] = {}
     for record in records:
-        current = unique.get(record.request_id)
-        unique[record.request_id] = (
+        key = record.session_id, record.request_id
+        current = unique.get(key)
+        unique[key] = (
             record if current is None else _merge_duplicate(current, record)
         )
 
@@ -142,6 +147,7 @@ def _merge_duplicate(current: UsageRecord, candidate: UsageRecord) -> UsageRecor
         "output_tokens",
         "cache_creation_input_tokens",
         "cache_read_input_tokens",
+        "cache_creation",
         "is_final",
     ):
         current_value = getattr(current, field)
@@ -151,7 +157,9 @@ def _merge_duplicate(current: UsageRecord, candidate: UsageRecord) -> UsageRecor
                 f"request_id={current.request_id}: conflicting {field}: "
                 f"{current_value} != {value}"
             )
-        if value is not None:
+        if value is not None and not (current.is_final is True and candidate.is_final is not True):
+            setattr(merged, field, value)
+        elif current_value is None:
             setattr(merged, field, value)
     merged.source_lines = _unique(current.source_lines + candidate.source_lines)
     merged.step_ids = _unique(current.step_ids + candidate.step_ids)
@@ -177,7 +185,7 @@ def _sum_known(records: list[UsageRecord], field: str) -> int | None:
 
 def _is_final(message: dict[str, Any]) -> bool | None:
     stop_reason = message.get("stop_reason")
-    return stop_reason == "end_turn" if isinstance(stop_reason, str) else None
+    return bool(stop_reason) if isinstance(stop_reason, str) else None
 
 
 def _non_negative_int(value: Any) -> int | None:

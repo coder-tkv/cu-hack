@@ -1,0 +1,10 @@
+services:
+  ml:
+    build: .
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4.1-mini-2025-04-14}
+    volumes:
+      - ./data:/data:ro
+      - ./output:/output
+    command: ["preview", "examples/packet.json", "--out", "/output/preview.json"]
