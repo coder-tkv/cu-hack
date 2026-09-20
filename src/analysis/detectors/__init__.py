@@ -7,6 +7,7 @@ run_all(steps) -> findings[], отсортированные по значимо
 
 from __future__ import annotations
 
+from ..facts import fact_text, limitations
 from ..merge import merge_findings
 from ..severity import classify, sort_key
 from .edits import detect_edit_churn
@@ -84,6 +85,10 @@ def run_all(steps: list[dict]) -> tuple[list[dict], list[str]]:
     findings = merge_findings(findings)
     for i, f in enumerate(findings, start=1):
         f["id"] = f"f{i}"
+        # «ФАКТ — посчитано кодом» и честный список того, чего код не знает:
+        # это же уходит в промпт, чтобы модель объясняла факты, а не придумывала их
+        f["fact"] = fact_text(f)
+        f["limitations"] = limitations(f)
     return findings, warnings
 
 

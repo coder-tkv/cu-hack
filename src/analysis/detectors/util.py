@@ -224,11 +224,18 @@ def finding(
     explanation: str | None = None,
 ) -> dict:
     """Единый формат находки: {type, severity, stepIds, evidence, ...}."""
+    # id шага не обязан быть числом: у общего контракта это строка
+    # "<session>:line_<N>:block_<M>". Порядок сохраняем, дубли убираем.
+    seen = []
+    for i in step_ids:
+        if i is not None and i not in seen:
+            seen.append(i)
+    ordered = sorted(seen) if all(isinstance(i, int) for i in seen) else seen
     return {
         "type": ftype,
         "severity": round(clamp01(severity), 3),
         "title": title,
-        "stepIds": sorted(set(int(i) for i in step_ids)),
+        "stepIds": ordered,
         "evidence": evidence or {},
         "metrics": metrics or {},
         "explanation": explanation,

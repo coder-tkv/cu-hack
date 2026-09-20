@@ -361,3 +361,72 @@ class TestToolRecommendations(unittest.TestCase):
         doc = report["artifacts"]["CLAUDE.generated.md"]
         self.assertIn("Инструменты и доступы", doc)
         self.assertIn("pandoc", doc)
+
+
+class TestFactsAndCandidates(unittest.TestCase):
+    """Дизайн показывает «ФАКТ — посчитано кодом» и строку ограничения.
+    Контракт бекенда требует Candidate с закрытым списком kind."""
+
+    def test_every_finding_has_fact_with_numbers(self):
+        report = analyze_log(npm_loop())
+        self.assertTrue(report["findings"])
+        for f in report["findings"]:
+            self.assertTrue(f["fact"].strip(), f"{f['type']}: пустой факт")
+            self.assertTrue(any(ch.isdigit() for ch in f["fact"]),
+                            f"{f['type']}: в факте нет ни одного числа — это не факт, а мнение")
+            self.assertNotIn("вероятно", f["fact"].lower(), "предположения — работа модели, не кода")
+
+    def test_every_finding_states_its_limits(self):
+        for f in analyze_log(npm_loop())["findings"]:
+            self.assertTrue(f["limitations"], f"{f['type']}: не сказано, чего код не знает")
+
+    def test_all_finding_types_have_a_fact_template(self):
+        from analysis.facts import _COMMON
+
+        self.assertEqual(sorted(set(FINDING_TYPES) - set(_COMMON)), [])
+
+    def test_candidates_match_frozen_contract(self):
+        from analysis.candidates import KIND_MAP, to_candidates
+
+        allowed = {"repeated_tool_call", "repeated_failed_tool", "failure_chain",
+                   "human_intervention", "reverted_edit", "long_gap"}
+        self.assertTrue(set(KIND_MAP.values()).issubset(allowed))
+        report = analyze_log(npm_loop())
+        candidates, unmapped = to_candidates(report["findings"])
+        self.assertTrue(candidates)
+        for c in candidates:
+            self.assertIn(c["kind"], allowed)
+            self.assertTrue(c["evidence_step_ids"], "кандидат без ссылок недопустим")
+            self.assertTrue(all(isinstance(i, str) for i in c["evidence_step_ids"]))
+            self.assertIsNone(c["severity"], "severity заполняет ranking.py, не детектор")
+            self.assertIsNone(c["rank"])
+            self.assertIn(c["evidence_strength"], ("direct", "indirect", "weak"))
+            for k, v in c["facts"].items():
+                self.assertIsInstance(v, (int, float, bool, str, type(None)), f"facts.{k} не плоский")
+
+    def test_unsupported_kinds_are_reported_not_faked(self):
+        from analysis.candidates import to_candidates
+
+        lines = [human_line("правь", 0)]
+        for i in range(4):
+            lines += [call_line("Edit", {"file_path": "/p/a.ts", "old_string": f"v{i}",
+                                         "new_string": f"v{i + 1}"}, f"e{i}", i * 2 + 1),
+                      result_line(f"e{i}", "ok", i * 2 + 2)]
+        _, unmapped = to_candidates(analyze_log("\n".join(lines))["findings"])
+        self.assertTrue(unmapped, "file_churn в контракте отсутствует — это нужно показать, а не спрятать")
+        for u in unmapped:
+            self.assertTrue(u["proposedKind"])
+            self.assertTrue(u["ourType"])
+
+    def test_step_ids_may_be_strings(self):
+        """Общий контракт использует step_id вида s_7d9:line_42:block_0."""
+        from analysis.candidates import to_candidates
+        from analysis.detectors.util import finding
+
+        f = finding("repeated_call", severity=0.5, title="x",
+                    step_ids=["s1:line_4:block_0", "s1:line_9:block_0", "s1:line_4:block_0"],
+                    explanation="y")
+        self.assertEqual(f["stepIds"], ["s1:line_4:block_0", "s1:line_9:block_0"])
+        f.update({"detector": "repeated", "evidenceStrength": "direct", "limitations": [], "fact": "3 раза"})
+        candidates, _ = to_candidates([f])
+        self.assertEqual(candidates[0]["evidence_step_ids"], f["stepIds"])
