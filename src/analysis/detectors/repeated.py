@@ -11,10 +11,13 @@ from .util import (
     MUTATING_TOOLS,
     plural,
     args_key,
+    group_key,
+    is_compact_boundary,
     build_index,
     describe_args,
     error_signature,
     finding,
+    has_identity,
     jaccard,
     snippet,
     tokens_of,
@@ -32,7 +35,7 @@ def detect_repeated_calls(
 ) -> list[dict]:
     idx = build_index(steps)
     result_by_call = idx["resultByCall"]
-    calls = [s for s in steps if s.get("kind") == "tool_call"]
+    calls = [s for s in steps if s.get("kind") == "tool_call" and has_identity(s)]
     if len(calls) < min_repeats:
         return []
 
@@ -40,7 +43,7 @@ def detect_repeated_calls(
 
     groups: dict[str, list[dict]] = {}
     for c in calls:
-        groups.setdefault(args_key(c), []).append(c)
+        groups.setdefault(group_key(c), []).append(c)
 
     out: list[dict] = []
     covered: set[int] = set()
@@ -106,12 +109,14 @@ def _make(ftype: str, cluster: list[dict], key: str, steps: list[dict], result_b
 
     mutating_between = 0
     other_calls_between = 0
+    compactions_between = 0
+    cluster_ids = {c["id"] for c in cluster}
     for s in steps:
         if not (first["id"] < s["id"] < last["id"]):
             continue
-        if s.get("kind") != "tool_call":
-            continue
-        if s["id"] in {c["id"] for c in cluster}:
+        if is_compact_boundary(s):
+            compactions_between += 1
+        if s.get("kind") != "tool_call" or s["id"] in cluster_ids:
             continue
         other_calls_between += 1
         if s.get("tool") in MUTATING_TOOLS:
@@ -142,6 +147,8 @@ def _make(ftype: str, cluster: list[dict], key: str, steps: list[dict], result_b
         sev += 0.15
     if errors_identical:
         sev += 0.15
+    if compactions_between:
+        sev -= 0.15  # между повторами сжимался контекст: агент мог забыть прошлый результат
     if ftype == "similar_call":
         sev -= 0.10
 
@@ -164,6 +171,11 @@ def _make(ftype: str, cluster: list[dict], key: str, steps: list[dict], result_b
         explanation = (
             "Несколько близких вариантов одной команды подряд — похоже на перебор вариантов "
             "вместо проверки причины."
+        )
+    if compactions_between:
+        explanation += (
+            " Между повторами сжимался контекст сессии — часть повторов может объясняться "
+            "потерей прошлого результата из памяти агента."
         )
 
     step_ids: list[int] = []
@@ -195,6 +207,7 @@ def _make(ftype: str, cluster: list[dict], key: str, steps: list[dict], result_b
             "repeats": len(cluster),
             "mutatingBetween": mutating_between,
             "otherCallsBetween": other_calls_between,
+            "compactionsBetween": compactions_between,
             "backToBack": back_to_back,
             "errors": errors,
             "spanCalls": ordinal[last["id"]] - ordinal[first["id"]] + 1,

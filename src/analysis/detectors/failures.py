@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from .util import args_key, build_index, describe_args, error_signature, finding, plural, snippet
+from .util import build_index, describe_args, error_signature, finding, group_key, has_identity, plural, snippet
 
 
 def detect_failures(steps: list[dict]) -> list[dict]:
@@ -18,10 +18,12 @@ def detect_failures(steps: list[dict]) -> list[dict]:
 
     failed = []
     for c in calls:
+        if not has_identity(c):
+            continue  # нечем отличить один такой вызов от другого — не группируем
         r = result_by_call.get(c["id"])
         if r and r.get("isError"):
             failed.append(
-                {"call": c, "result": r, "key": args_key(c), "sig": error_signature(r.get("text"))}
+                {"call": c, "result": r, "key": group_key(c), "sig": error_signature(r.get("text"))}
             )
 
     out: list[dict] = []

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from statistics import median
 
-from ..pricing import step_cost
+from ..pricing import billable_input_equivalent, step_cost
 from .util import MUTATING_TOOLS, build_index, by_id, finding, snippet
 
 MIN_SESSION_TOKENS = 20_000  # на крошечных сессиях разбор по участкам смысла не имеет
@@ -50,7 +50,7 @@ def detect_token_hotspots(steps: list[dict]) -> list[dict]:
         per_turn.append(
             {
                 "turn": t,
-                "billable": tin + tout + cwrite + cread // 10,  # вход-эквивалент с учётом кэша
+                "billable": billable_input_equivalent(tin, tout, cread, cwrite),
                 "tokens": {"in": tin, "out": tout, "cacheRead": cread, "cacheWrite": cwrite},
                 "cost": round(cost, 4) if cost_known else None,
                 "mutating": mutating,

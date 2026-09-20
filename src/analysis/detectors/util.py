@@ -54,6 +54,30 @@ def args_key(step: dict) -> str:
     return f"{tool}|{norm('&'.join(parts))[:500]}"
 
 
+def has_identity(step: dict) -> bool:
+    """Есть ли у вызова хоть что-то отличающее его от другого вызова.
+
+    Без имени инструмента и без аргументов все такие шаги схлопываются в один ключ,
+    и детектор повторов начинает видеть «три одинаковых вызова» там, где их нет.
+    """
+    if step.get("tool"):
+        return True
+    a = step.get("args")
+    return isinstance(a, (dict, list, str)) and bool(a)
+
+
+def group_key(step: dict) -> str:
+    """Ключ группировки повторов. Сабагент — отдельный исполнитель: его вызовы
+    нельзя складывать в одну серию с вызовами главного потока."""
+    return ("sub|" if step.get("sidechain") else "") + args_key(step)
+
+
+def is_compact_boundary(step: dict) -> bool:
+    """Шаг сжатия контекста: после него агент заново читает то, что уже читал."""
+    raw = step.get("raw")
+    return isinstance(raw, str) and "compact_boundary" in raw
+
+
 def tokens_of(s: Any) -> set[str]:
     return {t for t in _TOKEN_SPLIT.split(str(s).lower()) if len(t) > 1}
 

@@ -46,6 +46,15 @@ def rates(model: str | None) -> dict | None:
     }
 
 
+def billable_input_equivalent(tin: int, tout: int, cache_read: int, cache_write: int) -> int:
+    """Единая мера «во что обошёлся участок», в эквиваленте обычных входных токенов.
+
+    Чтение кэша примерно в 10 раз дешевле обычного входа, поэтому делим его на 10.
+    Формула живёт здесь одна: детектор и отчёт обязаны считать одинаково.
+    """
+    return int(tin) + int(tout) + int(cache_write) + int(cache_read) // 10
+
+
 def step_cost(step: dict) -> float | None:
     """Стоимость одного шага в долларах или None, если модель неизвестна."""
     u = step.get("usage")

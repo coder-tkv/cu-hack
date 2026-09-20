@@ -14,6 +14,27 @@ from .repeated import detect_repeated_calls
 from .timing import detect_idle_and_slow
 from .tokens import detect_token_hotspots
 
+# Полный список типов находок. Новый тип обязан попасть сюда — иначе run_all
+# положит предупреждение в отчёт, а тест аудита не даст выпустить его без проверки.
+FINDING_TYPES = (
+    "repeated_call",
+    "similar_call",
+    "retry_loop",
+    "repeated_error",
+    "high_failure_rate",
+    "api_errors",
+    "token_hotspot",
+    "spend_without_changes",
+    "edit_revert",
+    "file_churn",
+    "rewrite_loop",
+    "human_corrections",
+    "interruptions",
+    "repeated_instruction",
+    "idle_gaps",
+    "slow_tool_calls",
+)
+
 DETECTORS = (
     ("repeated", detect_repeated_calls),
     ("failures", detect_failures),
@@ -37,6 +58,8 @@ def run_all(steps: list[dict]) -> tuple[list[dict], list[str]]:
             warnings.append(f"детектор {name} упал: {e}")
             continue
         for f in got:
+            if f.get("type") not in FINDING_TYPES:
+                warnings.append(f"неизвестный тип находки {f.get('type')} от детектора {name}")
             # ссылки на шаги обязаны существовать: находку без них не показываем
             f["stepIds"] = [i for i in f.get("stepIds", []) if i in valid_ids]
             if not f["stepIds"]:
@@ -51,4 +74,4 @@ def run_all(steps: list[dict]) -> tuple[list[dict], list[str]]:
     return findings, warnings
 
 
-__all__ = ["run_all", "DETECTORS"]
+__all__ = ["run_all", "DETECTORS", "FINDING_TYPES"]
