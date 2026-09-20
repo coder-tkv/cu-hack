@@ -4,7 +4,7 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .env
-.env.*
+.env*
 !.env.example
 !.env.template
 data/
@@ -19,3 +19,10 @@ logs/
 *.jsonl
 report.json
 steps.json
+
+# Frontend and local development files
+venv/
+.vscode/
+node_modules/
+dist/
+*.env.local

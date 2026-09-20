@@ -1,0 +1,68 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  background: var(--color-bg);
+}
+
+.main {
+  flex: 1 1 auto;
+  display: flex;
+  justify-content: center;
+  padding: var(--space-30) var(--space-20) var(--space-40);
+}
+
+/* Экран 1: карточка стоит по центру всего полотна (панель компенсируем отступом). */
+.mainCentered {
+  align-items: center;
+  padding: var(--space-40) var(--space-20);
+  padding-bottom: calc(var(--space-40) + var(--topbar-height));
+}
+
+/* Экран 2: карточка прижата к верху, как в макете (отступ 29px от панели). */
+.mainTop {
+  align-items: flex-start;
+  padding-top: 29px;
+}
+
+.card {
+  width: 100%;
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  padding: var(--card-padding);
+}
+
+.cardModel {
+  max-width: var(--card-width-model);
+  min-height: var(--card-height-model);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 75px var(--space-40);
+}
+
+/* Экран 4: широкое полотно с полями 104px и прокруткой по находкам. */
+.mainWide {
+  padding: var(--space-30) var(--report-padding-x) var(--space-46);
+}
+
+.cardWide {
+  max-width: calc(var(--layout-width) - 2 * var(--report-padding-x));
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+}
+
+@media (max-width: 900px) {
+  .mainWide {
+    padding-left: var(--space-20);
+    padding-right: var(--space-20);
+  }
+}
+
+.cardUpload {
+  max-width: var(--card-width-upload);
+  min-height: var(--card-height-upload);
+  display: flex;
+  flex-direction: column;
+}

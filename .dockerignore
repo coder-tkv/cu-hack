@@ -9,3 +9,6 @@
 **/output
 **/*.zip
 **/*.jsonl
+
+**/node_modules
+**/dist

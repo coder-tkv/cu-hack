@@ -1,0 +1,130 @@
+/* Токены дизайна, снятые из макета (ЦУ хак.pdf, стр. 1-2).
+   Только эти переменные используются в вёрстке — «магических» значений по месту нет. */
+
+:root {
+  /* Цвета */
+  --color-bg: #000018;
+  --color-topbar: #222237;
+  --color-surface: #141326;
+  --color-surface-raised: #262536; /* блок предупреждений на экране обработки */
+  --color-field: #333243;
+  --color-track: #2f2e3f; /* незаполненная полоса прогресса */
+  --color-circle-pending: #343343;
+  --color-primary: #5274ff;
+  --color-primary-hover: #6b87ff;
+  --color-primary-soft: #dde4ff;
+  --color-primary-soft-hover: #eaefff;
+  --color-primary-disabled: #334492;
+
+  --color-text: #ffffff;
+  --color-text-secondary: #b8b8bd;
+  --color-text-muted: #a1a0a8;
+  --color-text-placeholder: #84848d;
+  --color-text-disabled: #898992;
+  --color-border-dashed: #888891;
+
+  /* Экран находок (ЦУ хак-2.pdf, стр. 4) */
+  --color-group: #151429; /* карточка группы находок */
+  --color-panel: #27263a; /* карточка внутри группы */
+  --color-pill: #3a3a4d; /* плашка «Строка 42» */
+  --color-quote: #312c51; /* блок рекомендации */
+  --color-quote-mark: #8d86d8;
+  --color-chip: #17172e; /* чип фильтра по важности */
+  --color-chip-active: #e1e6fd;
+  --color-topbar-action: #3e356a; /* кнопка «Новый анализ» */
+  --color-topbar-action-hover: #4b4180;
+
+  --color-severity-high: #ea406d;
+  --color-severity-medium: #e66b3e;
+  --color-severity-low: #fdf3c8;
+
+  --color-danger: #ff6b4a;
+  --color-danger-bg: rgba(255, 107, 74, 0.12);
+  --color-success: #62cf69;
+  --color-warning: #ff642c;
+  --color-link: #89a0ff;
+
+  /* Типографика */
+  --font-family: "Roboto", "Helvetica Neue", Arial, sans-serif;
+  --font-size-topbar: 17px;
+  --font-size-title-lg: 24px; /* «Выберите модель» */
+  --font-size-title: 22px; /* «Загрузите лог сессии» */
+  --font-size-subtitle: 16px;
+  --font-size-label: 16px;
+  --font-size-field: 17px;
+  --font-size-button: 15px;
+  --font-size-button-lg: 18px;
+  --font-size-body: 14px;
+  --font-size-small: 13px;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 700;
+
+  --line-height-tight: 1.2;
+  --line-height-base: 1.45;
+
+  /* Сетка и отступы */
+  --layout-width: 1440px;
+  --topbar-height: 60px;
+  --topbar-padding-x: 40px;
+
+  --card-padding: 30px;
+  --card-width-model: 820px;
+  --card-height-model: 314px;
+  --card-width-upload: 563px;
+  --card-height-upload: 657px;
+
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-10: 10px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-28: 28px;
+  --space-30: 30px;
+  --space-40: 40px;
+  --space-46: 46px;
+
+  /* Сетка экрана находок */
+  --report-padding-x: 104px;
+  --report-gap: 21px;
+  --group-padding: 22px;
+  --panel-padding: 20px;
+  --report-col-1: 317fr;
+  --report-col-2: 379fr;
+  --report-col-3: 472fr;
+
+  /* Размеры контролов */
+  --control-height-field: 41px;
+  --control-height-select: 44px;
+  --control-height-button: 38px;
+  --control-height-button-lg: 42px;
+  --control-padding-x: 20px;
+
+  --dropzone-height: 209px;
+
+  /* Экран обработки */
+  --stage-dot: 20px;
+  --stage-gap: 28px;
+  --progress-height: 8px;
+  --progress-radius: 4px;
+
+  /* Радиусы */
+  --radius-card: 12px;
+  --radius-control: 6px;
+  --radius-dropzone: 3px;
+  --radius-panel: 10px;
+  --radius-quote: 8px;
+  --radius-pill: 6px;
+  --radius-chip: 19px;
+
+  --control-height-chip: 38px;
+  --control-height-pill: 36px;
+
+  /* Прочее */
+  --border-width-dashed: 1.5px;
+  --focus-ring: 2px solid var(--color-primary-soft);
+  --transition-fast: 120ms ease;
+}
