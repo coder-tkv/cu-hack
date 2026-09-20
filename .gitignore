@@ -10,3 +10,8 @@ wheels/
 .venv
 .env
 .idea/
+# Логи сессий и производные: содержат код, пути и возможные секреты
+logs/
+*.jsonl
+report.json
+steps.json
