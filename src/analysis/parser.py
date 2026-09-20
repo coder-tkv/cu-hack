@@ -13,7 +13,18 @@ from typing import Any, Iterable
 
 MAX_TEXT = 4000  # столько символов текста храним в шаге
 MAX_ARG_STR = 20000  # отдельная строка внутри args
+MAX_RESULT_STR = 2000  # строка внутри результата инструмента
 MAX_WARNINGS = 200
+
+# Из toolUseResult берём только то, что нужно детекторам и человеку в отчёте.
+# originalFile, file и content — это содержимое файлов целиком: на большом логе
+# они дают гигабайты, а для разбора бесполезны (текст результата уже есть в шаге).
+RESULT_KEEP = (
+    "stdout", "stderr", "interrupted", "is_error", "returnCodeInterpretation",
+    "filePath", "oldString", "newString", "replaceAll", "edits",
+    "type", "success", "numLines", "numFiles", "mode", "totalLines",
+)
+RESULT_DROP = ("originalFile", "file", "content", "userModified", "results", "questions")
 
 # Синтетические "реплики пользователя": их пишет харнесс, а не человек.
 SYNTHETIC_PREFIXES = (
@@ -63,6 +74,52 @@ def _shrink(value: Any, depth: int = 0) -> Any:
     return str(value)[:200]
 
 
+def _patch_summary(patch: Any) -> dict | None:
+    """structuredPatch занимает сотни килобайт; в отчёте достаточно сводки."""
+    if not isinstance(patch, list):
+        return None
+    added = removed = 0
+    for hunk in patch:
+        if not isinstance(hunk, dict):
+            continue
+        for line in hunk.get("lines") or []:
+            if isinstance(line, str):
+                if line.startswith("+"):
+                    added += 1
+                elif line.startswith("-"):
+                    removed += 1
+    return {"hunks": len(patch), "linesAdded": added, "linesRemoved": removed}
+
+
+def _shrink_result(tur: dict) -> dict:
+    """Чистим результат инструмента: только полезные поля, строки — короткие."""
+    out: dict = {}
+    for k in RESULT_KEEP:
+        if k not in tur:
+            continue
+        v = tur[k]
+        if isinstance(v, str):
+            out[k] = _truncate(v, MAX_RESULT_STR)
+        elif k == "edits" and isinstance(v, list):
+            out[k] = [
+                {
+                    kk: _truncate(vv, MAX_RESULT_STR) if isinstance(vv, str) else vv
+                    for kk, vv in e.items()
+                }
+                for e in v[:20]
+                if isinstance(e, dict)
+            ]
+        else:
+            out[k] = _shrink(v, 4)
+    summary = _patch_summary(tur.get("structuredPatch"))
+    if summary:
+        out["patchSummary"] = summary
+    dropped = [k for k in RESULT_DROP if k in tur]
+    if dropped:
+        out["omitted"] = dropped  # честно говорим, что выбросили
+    return out
+
+
 def _text_of_blocks(blocks: Iterable[Any]) -> str:
     parts: list[str] = []
     for b in blocks:
@@ -87,11 +144,26 @@ def _norm_usage(u: Any) -> dict | None:
     def n(x: Any) -> int:
         return x if isinstance(x, (int, float)) and not isinstance(x, bool) else 0
 
+    total_write = int(n(u.get("cache_creation_input_tokens")))
+    # Разбивка по TTL: часовой кэш стоит дороже пятиминутного, а Claude Code
+    # почти всегда пишет в часовой. Без разбивки считаем весь объём пятиминутным.
+    cc = u.get("cache_creation")
+    w5 = w1h = 0
+    if isinstance(cc, dict):
+        w5 = int(n(cc.get("ephemeral_5m_input_tokens")))
+        w1h = int(n(cc.get("ephemeral_1h_input_tokens")))
+    if w5 + w1h == 0:
+        w5 = total_write
+    elif w5 + w1h != total_write:
+        total_write = w5 + w1h  # доверяем разбивке: она детальнее
+
     return {
         "in": int(n(u.get("input_tokens"))),
         "out": int(n(u.get("output_tokens"))),
         "cacheRead": int(n(u.get("cache_read_input_tokens"))),
-        "cacheWrite": int(n(u.get("cache_creation_input_tokens"))),
+        "cacheWrite": total_write,
+        "cacheWrite5m": w5,
+        "cacheWrite1h": w1h,
     }
 
 
@@ -333,7 +405,7 @@ class Parser:
                     tur and (tur.get("interrupted") is True or tur.get("is_error") is True)
                 )
                 if tur:
-                    s["result"] = _shrink(tur)
+                    s["result"] = _shrink_result(tur)
                 self._push(s)
                 made += 1
             elif btype in ("text", "image"):
