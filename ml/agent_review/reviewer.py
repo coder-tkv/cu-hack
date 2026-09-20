@@ -17,7 +17,7 @@ from .redaction import clean_packet
 from .schemas import (Candidate, CompressionStats, ModelDecision, ReviewInput,
                       ReviewReport, ReviewedCandidate)
 
-DEFAULT_MODEL = "gpt-4.1-mini-2025-04-14"
+DEFAULT_MODEL = "gpt-5.6-sol"
 MAX_REQUEST_BYTES = 48_000
 MAX_CALLS = 8
 MAX_ANALYSIS_SECONDS = 120.0
@@ -31,14 +31,19 @@ def get_prompt() -> str:
 def make_request(packet: ReviewInput, candidate: Candidate, model: str,
                  prompt: str | None = None) -> tuple[dict, CompressionStats]:
     payload, stats = compress_input(packet, candidate)
-    return {
+    request = {
         "model": model,
         "instructions": prompt if prompt is not None else get_prompt(),
         "input": payload,
         "text_format": ModelDecision,
         "max_output_tokens": 4000,
         "store": False,
-    }, stats
+    }
+    # Keep small episode reviews within our latency budget. GPT-4.1 must not
+    # receive the reasoning parameter, which that model does not support.
+    if model in {"gpt-5.6-sol", "gpt-5.6"}:
+        request["reasoning"] = {"effort": "low"}
+    return request, stats
 
 
 def request_bytes(request: dict) -> int:

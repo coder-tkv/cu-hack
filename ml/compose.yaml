@@ -3,7 +3,7 @@ services:
     build: .
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      LLM_MODEL: ${LLM_MODEL:-gpt-4.1-mini-2025-04-14}
+      LLM_MODEL: ${LLM_MODEL:-gpt-5.6-sol}
     volumes:
       - ./data:/data:ro
       - ./output:/output

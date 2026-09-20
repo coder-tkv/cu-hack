@@ -217,15 +217,21 @@ class ReviewerTests(unittest.TestCase):
             self.assertFalse(sent["store"])
             self.assertTrue(sent["text"]["format"]["strict"])
             self.assertNotIn("tools", sent)
+            if sent["model"] == "gpt-5.6-sol":
+                self.assertEqual(sent["reasoning"], {"effort": "low"})
+            else:
+                self.assertNotIn("reasoning", sent)
             return httpx.Response(200, json={"id": "resp_test", "object": "response", "created_at": 0,
                 "status": "completed", "model": sent["model"], "output": [{"type": "message", "id": "msg_test",
                 "role": "assistant", "status": "completed", "content": [{"type": "output_text",
                 "text": decision().model_dump_json(), "annotations": []}]}],
                 "usage": {"input_tokens": 100, "output_tokens": 20, "total_tokens": 120}, "error": None, "incomplete_details": None})
-        async def run():
+        async def run(model):
             async with AsyncOpenAI(api_key="test-only", http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond))) as client:
-                return await review_async(packet(), client=client)
-        self.assertEqual(asyncio.run(run()).status, "complete")
+                return await review_async(packet(), client=client, model=model)
+        for model in ("gpt-5.6-sol", "gpt-4.1-2025-04-14"):
+            with self.subTest(model=model):
+                self.assertEqual(asyncio.run(run(model)).status, "complete")
 
 
 class PreparationTests(unittest.TestCase):
