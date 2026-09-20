@@ -23,8 +23,10 @@ function stageStates(status: AnalysisStatus, progress: Progress): StageState[] {
 
   const current = STAGES.findIndex((item) => item.stage === progress.stage);
   const broken = BROKEN_STATUSES.includes(status);
-  // queued: стадия ещё не началась, все строки в ожидании.
-  const activeIndex = current === -1 ? -1 : current;
+  // queued в список стадий не входит, но файл уже принят и работа началась:
+  // держим первую строку активной, иначе экран замирает без признаков жизни.
+  // Подпись берётся из stage_label и честно говорит «В очереди».
+  const activeIndex = current !== -1 ? current : status === "queued" ? 0 : -1;
 
   return STAGES.map((_, index) => {
     if (activeIndex === -1) return "pending";
@@ -37,6 +39,10 @@ function stageStates(status: AnalysisStatus, progress: Progress): StageState[] {
 export function StageList({ status, progress }: { status: AnalysisStatus; progress: Progress }) {
   const states = stageStates(status, progress);
   const hasCounter = progress.done !== null && progress.total !== null;
+  // percent === 0 — это «стадия только стартовала», а не измеренный ноль. Полоса
+  // нулевой ширины неотличима от зависшего экрана, поэтому такой случай —
+  // тоже неопределённый индикатор.
+  const hasMeasurableProgress = progress.percent !== null && progress.percent > 0;
 
   return (
     <ol className={styles.list}>
@@ -78,7 +84,7 @@ export function StageList({ status, progress }: { status: AnalysisStatus; progre
             <div className={styles.track}>
               {state === "done" && <div className={`${styles.fill} ${styles.fillDone}`} />}
               {state === "active" &&
-                (progress.percent !== null ? (
+                (hasMeasurableProgress ? (
                   <div className={styles.fill} style={{ width: `${progress.percent}%` }} />
                 ) : (
                   <div className={`${styles.fill} ${styles.fillIndeterminate}`} />

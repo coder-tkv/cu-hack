@@ -92,7 +92,7 @@
   width: 100%;
 }
 
-/* percent === null: проценты не выдумываем, показываем неопределённый индикатор. */
+/* percent === null или 0: проценты не выдумываем, показываем неопределённый индикатор. */
 .fillIndeterminate {
   width: 40%;
   animation: slide 1.4s ease-in-out infinite;
