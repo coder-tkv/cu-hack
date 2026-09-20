@@ -23,6 +23,21 @@
   --color-text-disabled: #898992;
   --color-border-dashed: #888891;
 
+  /* Экран находок (ЦУ хак-2.pdf, стр. 4) */
+  --color-group: #151429; /* карточка группы находок */
+  --color-panel: #27263a; /* карточка внутри группы */
+  --color-pill: #3a3a4d; /* плашка «Строка 42» */
+  --color-quote: #312c51; /* блок рекомендации */
+  --color-quote-mark: #8d86d8;
+  --color-chip: #17172e; /* чип фильтра по важности */
+  --color-chip-active: #e1e6fd;
+  --color-topbar-action: #3e356a; /* кнопка «Новый анализ» */
+  --color-topbar-action-hover: #4b4180;
+
+  --color-severity-high: #ea406d;
+  --color-severity-medium: #e66b3e;
+  --color-severity-low: #fdf3c8;
+
   --color-danger: #ff6b4a;
   --color-danger-bg: rgba(255, 107, 74, 0.12);
   --color-success: #62cf69;
@@ -70,6 +85,16 @@
   --space-28: 28px;
   --space-30: 30px;
   --space-40: 40px;
+  --space-46: 46px;
+
+  /* Сетка экрана находок */
+  --report-padding-x: 104px;
+  --report-gap: 21px;
+  --group-padding: 22px;
+  --panel-padding: 20px;
+  --report-col-1: 317fr;
+  --report-col-2: 379fr;
+  --report-col-3: 472fr;
 
   /* Размеры контролов */
   --control-height-field: 41px;
@@ -90,6 +115,13 @@
   --radius-card: 12px;
   --radius-control: 6px;
   --radius-dropzone: 3px;
+  --radius-panel: 10px;
+  --radius-quote: 8px;
+  --radius-pill: 6px;
+  --radius-chip: 19px;
+
+  --control-height-chip: 38px;
+  --control-height-pill: 36px;
 
   /* Прочее */
   --border-width-dashed: 1.5px;

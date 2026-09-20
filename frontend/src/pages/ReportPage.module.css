@@ -1,32 +1,289 @@
+/* Экран 4 (ЦУ хак-2.pdf, стр. 4): «Находки», прокрутка вниз по группам находок. */
+
+.topAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 37px;
+  padding: 0 var(--space-24);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--color-topbar-action);
+  color: var(--color-text);
+  font-size: var(--font-size-button);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.topAction:hover {
+  background: var(--color-topbar-action-hover);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 21px;
+  margin-bottom: var(--space-20);
+}
+
 .title {
   margin: 0;
-  font-size: var(--font-size-title);
-  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-title-lg);
+  font-weight: var(--font-weight-medium);
   line-height: var(--line-height-tight);
 }
 
-.summary {
-  margin: 11px 0 0;
-  font-size: var(--font-size-subtitle);
-  line-height: var(--line-height-base);
-  color: var(--color-text-secondary);
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--report-gap);
 }
 
-.note {
-  margin-top: var(--stage-gap);
-  padding: var(--space-16);
-  border-radius: var(--radius-card);
-  background: var(--color-surface-raised);
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: var(--control-height-chip);
+  padding: 0 var(--space-20);
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: var(--color-chip);
+  color: var(--color-text);
   font-size: var(--font-size-button);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.chip:hover {
+  background: #22223f;
+}
+
+.chipActive {
+  background: var(--color-chip-active);
+  color: var(--color-primary);
+}
+
+.chipActive:hover {
+  background: var(--color-primary-soft-hover);
+}
+
+.chipCount {
+  color: inherit;
+  opacity: 0.75;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.dot_high {
+  background: var(--color-severity-high);
+}
+
+.dot_medium {
+  background: var(--color-severity-medium);
+}
+
+.dot_low {
+  background: var(--color-severity-low);
+}
+
+/* Скачивание: кнопка из макета + список артефактов из report.artifacts. */
+.downloads {
+  position: relative;
+  margin-left: auto;
+}
+
+.download {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-10);
+  height: 37px;
+  padding: 0 var(--space-24);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-text);
+  font-size: var(--font-size-button);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.download:hover {
+  background: var(--color-primary-hover);
+}
+
+.downloadIcon {
+  width: 12px;
+  height: 7px;
+}
+
+.downloadMenu {
+  position: absolute;
+  top: calc(100% + var(--space-8));
+  right: 0;
+  z-index: 2;
+  min-width: 280px;
+  padding: var(--space-8);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+  box-shadow: 0 12px 30px rgba(0, 0, 12, 0.55);
+}
+
+.downloadItem {
+  display: block;
+  padding: var(--space-10) var(--space-12);
+  border-radius: var(--radius-pill);
+  color: var(--color-text);
+  font-size: var(--font-size-body);
+  text-decoration: none;
+}
+
+.downloadItem:hover {
+  background: var(--color-pill);
+}
+
+.downloadNote {
+  margin: var(--space-8) var(--space-12) var(--space-4);
+  font-size: var(--font-size-small);
+  color: var(--color-text-muted);
+}
+
+/* Группа находок */
+.group {
+  background: var(--color-group);
+  border-radius: var(--radius-card);
+  padding: var(--group-padding);
+  margin-bottom: var(--space-46);
+}
+
+.group:last-of-type {
+  margin-bottom: var(--space-20);
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  margin-bottom: var(--space-16);
+}
+
+.groupTitle {
+  margin: 0;
+  font-size: var(--font-size-field);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-tight);
+}
+
+.groupCount {
+  font-size: var(--font-size-body);
+  color: var(--color-text-muted);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--report-gap);
+}
+
+/* Шапка отчёта */
+.summaryGroup {
+  margin-bottom: var(--space-30);
+}
+
+.summaryHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-12);
+}
+
+.summaryMeta {
+  font-size: var(--font-size-small);
+  color: var(--color-text-muted);
+}
+
+.summaryText {
+  margin: var(--space-12) 0 0;
+  font-size: var(--font-size-subtitle);
   line-height: var(--line-height-base);
-  color: var(--color-text-secondary);
+  color: var(--color-text);
+}
+
+.partial {
+  margin-top: var(--space-16);
+  padding: var(--space-12) var(--space-16);
+  border-radius: var(--radius-quote);
+  background: rgba(255, 100, 44, 0.12);
+}
+
+.partialTitle {
+  margin: 0;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-warning);
+}
+
+/* Разделы под находками */
+.sectionTitle {
+  margin: 0 0 var(--space-16);
+  font-size: var(--font-size-field);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-tight);
+}
+
+.coverage {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--report-gap);
+}
+
+.coverageItem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-16) var(--panel-padding);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+}
+
+.coverageValue {
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-tight);
+}
+
+.coverageLabel {
+  font-size: var(--font-size-small);
+  color: var(--color-text-muted);
+}
+
+.footnote {
+  margin: var(--space-12) 0 0;
+  font-size: var(--font-size-small);
+  color: var(--color-text-muted);
+}
+
+.plainList {
+  margin: var(--space-12) 0 0;
+  padding-left: var(--space-20);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-base);
+  color: var(--color-text-muted);
 }
 
 .artifacts {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-12);
-  margin-top: var(--space-20);
 }
 
 .artifact {
@@ -46,9 +303,82 @@
   background: var(--color-primary-soft-hover);
 }
 
-.actions {
-  margin-top: auto;
-  padding-top: var(--space-24);
+.provenance {
+  margin: 0 0 var(--space-20);
+  font-size: var(--font-size-small);
+  color: var(--color-text-muted);
+}
+
+/* Пустое состояние: пустой список находок — нормальный результат */
+.emptyTitle {
+  margin: 0;
+  font-size: var(--font-size-subtitle);
+  font-weight: var(--font-weight-medium);
+}
+
+.emptyText {
+  margin: var(--space-8) 0 0;
+  font-size: var(--font-size-body);
+  color: var(--color-text-muted);
+}
+
+/* Загрузка и ошибка */
+.skeletonList {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  gap: var(--space-30);
+}
+
+.skeletonGroup {
+  height: 228px;
+  border-radius: var(--radius-card);
+  background: linear-gradient(
+    90deg,
+    var(--color-group) 0%,
+    var(--color-panel) 50%,
+    var(--color-group) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1400ms ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeletonGroup {
+    animation: none;
+  }
+}
+
+.errorText {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+  margin: 0;
+  font-size: var(--font-size-subtitle);
+  color: var(--color-danger);
+}
+
+.errorIcon {
+  flex: 0 0 auto;
+}
+
+.errorActions {
+  display: flex;
+  gap: var(--space-12);
+  margin-top: var(--space-20);
+}
+
+@media (max-width: 900px) {
+  .header {
+    flex-wrap: wrap;
+  }
+
+  .downloads {
+    margin-left: 0;
+  }
 }

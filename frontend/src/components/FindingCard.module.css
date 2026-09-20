@@ -1,0 +1,306 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--report-gap);
+}
+
+/* Три колонки макета: 317 / 379 / 472 pt при зазоре 21px. */
+.row {
+  display: grid;
+  grid-template-columns: var(--report-col-1) var(--report-col-2) var(--report-col-3);
+  gap: var(--report-gap);
+  align-items: stretch;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--color-panel);
+  border-radius: var(--radius-panel);
+  padding: var(--panel-padding);
+}
+
+.panelHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+.panelTitle {
+  margin: 0 0 var(--space-16);
+  font-size: var(--font-size-field);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+}
+
+.panelHead .panelTitle {
+  margin-bottom: var(--space-16);
+}
+
+.pills {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.pill {
+  display: flex;
+  align-items: center;
+  height: var(--control-height-pill);
+  padding: 0 var(--space-16);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--color-pill);
+  color: var(--color-text);
+  font-size: var(--font-size-button);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.pill:hover {
+  background: #454458;
+}
+
+.pillActive {
+  border-color: var(--color-primary);
+}
+
+.link {
+  align-self: flex-start;
+  margin-top: var(--space-12);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-link);
+  font-size: var(--font-size-body);
+  cursor: pointer;
+}
+
+.link:hover {
+  color: var(--color-primary-soft);
+}
+
+.findingTitle {
+  margin: 0;
+  font-size: var(--font-size-button);
+  line-height: var(--line-height-base);
+  color: var(--color-text);
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  margin-top: var(--space-12);
+}
+
+.badge,
+.badgeSoft,
+.badgeMuted {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--space-10);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-tight);
+}
+
+.severity_high {
+  background: rgba(234, 64, 109, 0.18);
+  color: var(--color-severity-high);
+}
+
+.severity_medium {
+  background: rgba(230, 107, 62, 0.18);
+  color: var(--color-severity-medium);
+}
+
+.severity_low {
+  background: rgba(253, 243, 200, 0.14);
+  color: var(--color-severity-low);
+}
+
+.badgeSoft {
+  background: rgba(130, 145, 255, 0.16);
+  color: var(--color-link);
+}
+
+.badgeMuted {
+  background: var(--color-field);
+  color: var(--color-text-muted);
+}
+
+.text {
+  margin: var(--space-12) 0 0;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-base);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.muted {
+  margin: 0;
+  font-size: var(--font-size-body);
+  color: var(--color-text-muted);
+}
+
+.cause,
+.limitations {
+  margin-top: var(--space-12);
+}
+
+.causeLabel {
+  display: block;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+}
+
+.cause .text,
+.limitations .list {
+  margin-top: var(--space-4);
+}
+
+.list {
+  margin: var(--space-4) 0 0;
+  padding-left: var(--space-16);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-base);
+  color: var(--color-text-muted);
+}
+
+.facts {
+  margin: var(--space-12) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.factRow {
+  display: flex;
+  gap: var(--space-8);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-base);
+}
+
+.factKey {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+}
+
+.factValue {
+  margin: 0;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* Блок рекомендации: тёмно-фиолетовый с кавычками по углам. */
+.quote {
+  position: relative;
+  margin-top: var(--space-8);
+  padding: var(--space-16) var(--space-30) var(--space-20) var(--space-40);
+  border-radius: var(--radius-quote);
+  background: var(--color-quote);
+}
+
+.quote + .quote {
+  margin-top: var(--space-12);
+}
+
+.quoteOpen,
+.quoteClose {
+  position: absolute;
+  color: var(--color-quote-mark);
+}
+
+.quoteOpen {
+  top: var(--space-16);
+  left: var(--space-16);
+}
+
+.quoteClose {
+  right: var(--space-12);
+  bottom: var(--space-8);
+  transform: rotate(180deg);
+}
+
+.quoteText {
+  margin: 0;
+  font-size: var(--font-size-button);
+  line-height: var(--line-height-base);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.quoteClamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.recDetails {
+  margin-top: var(--space-12);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.recLine {
+  margin: 0;
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-base);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.recLabel {
+  display: block;
+  color: var(--color-text-muted);
+}
+
+.recSource {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--color-text-muted);
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: -4px -4px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.iconButton:hover {
+  opacity: 0.7;
+}
+
+.evidence {
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+  padding: var(--panel-padding);
+}
+
+@media (max-width: 1100px) {
+  .row {
+    grid-template-columns: 1fr;
+  }
+}

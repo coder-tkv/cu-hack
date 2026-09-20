@@ -41,6 +41,25 @@
   padding: 75px var(--space-40);
 }
 
+/* Экран 4: широкое полотно с полями 104px и прокруткой по находкам. */
+.mainWide {
+  padding: var(--space-30) var(--report-padding-x) var(--space-46);
+}
+
+.cardWide {
+  max-width: calc(var(--layout-width) - 2 * var(--report-padding-x));
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+}
+
+@media (max-width: 900px) {
+  .mainWide {
+    padding-left: var(--space-20);
+    padding-right: var(--space-20);
+  }
+}
+
 .cardUpload {
   max-width: var(--card-width-upload);
   min-height: var(--card-height-upload);
