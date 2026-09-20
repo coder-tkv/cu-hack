@@ -1,0 +1,114 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--stage-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stage {
+  display: grid;
+  grid-template-columns: var(--stage-dot) 1fr;
+  column-gap: var(--space-12);
+  align-items: center;
+}
+
+/* Кружок статуса вертикально центрирован по тексту строки. */
+.dot {
+  grid-column: 1;
+  grid-row: 1;
+  width: var(--stage-dot);
+  height: var(--stage-dot);
+  border-radius: 50%;
+  background: var(--color-circle-pending);
+  align-self: center;
+}
+
+.dotActive {
+  background: var(--color-primary);
+}
+
+.dotDone {
+  background: transparent;
+  color: var(--color-success);
+}
+
+.dotError {
+  background: var(--color-warning);
+}
+
+.body {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-16);
+}
+
+.title {
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+}
+
+.meta {
+  flex: 0 0 auto;
+  font-size: var(--font-size-button);
+  line-height: var(--line-height-tight);
+  color: var(--color-text-secondary);
+}
+
+.note {
+  margin: var(--space-8) 0 0;
+  font-size: var(--font-size-button);
+  line-height: var(--line-height-tight);
+  color: var(--color-text-secondary);
+}
+
+.track {
+  grid-column: 2;
+  grid-row: 2;
+  height: var(--progress-height);
+  margin-top: 11px;
+  border-radius: var(--progress-radius);
+  background: var(--color-track);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  border-radius: var(--progress-radius);
+  background: var(--color-primary);
+  transition: width 300ms ease;
+}
+
+.fillDone {
+  background: var(--color-success);
+  width: 100%;
+}
+
+/* percent === null: проценты не выдумываем, показываем неопределённый индикатор. */
+.fillIndeterminate {
+  width: 40%;
+  animation: slide 1.4s ease-in-out infinite;
+}
+
+@keyframes slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fillIndeterminate {
+    animation-duration: 3s;
+  }
+}

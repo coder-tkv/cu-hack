@@ -13,6 +13,7 @@ import "./styles/global.css";
 import { ModelPage } from "./pages/ModelPage";
 import { UploadPage } from "./pages/UploadPage";
 import { AnalysisPage } from "./pages/AnalysisPage";
+import { ReportPage } from "./pages/ReportPage";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -21,6 +22,7 @@ createRoot(document.getElementById("root")!).render(
         <Route path="/" element={<ModelPage />} />
         <Route path="/upload" element={<UploadPage />} />
         <Route path="/analyses/:analysisId" element={<AnalysisPage />} />
+        <Route path="/analyses/:analysisId/report" element={<ReportPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

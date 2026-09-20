@@ -55,13 +55,31 @@ export function AlertIcon({ className }: { className?: string }) {
       focusable="false"
     >
       <circle cx="9" cy="9" r="9" fill="currentColor" />
+      <path d="M9 4.5V10" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="9" cy="13" r="1.2" fill="#ffffff" />
+    </svg>
+  );
+}
+
+export function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      width="20"
+      height="20"
+      viewBox="0 0 20 20"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle cx="10" cy="10" r="10" fill="currentColor" />
       <path
-        d="M9 4.5V10"
-        stroke="#141326"
+        d="M5.5 10.3L8.6 13.4L14.5 6.9"
+        stroke="#ffffff"
         strokeWidth="2"
         strokeLinecap="round"
+        strokeLinejoin="round"
       />
-      <circle cx="9" cy="13" r="1.2" fill="#141326" />
     </svg>
   );
 }

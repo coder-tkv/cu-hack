@@ -35,7 +35,11 @@ npm run lint
 |---|---|---|
 | `/` | `ModelPage` — выбор модели | 1 |
 | `/upload` | `UploadPage` — загрузка лога | 2 |
-| `/analyses/:analysisId` | `AnalysisPage` — заглушка статуса | 3 (в работе) |
+| `/analyses/:analysisId` | `AnalysisPage` — стадии обработки, опрос статуса | 3 |
+| `/analyses/:analysisId/report` | `ReportPage` — заглушка отчёта со скачиванием артефактов | макета пока нет |
+
+Опрос статуса живёт в `src/hooks/useAnalysisStatus.ts`: рекурсивный `setTimeout` раз в 2 секунды,
+остановка на терминальном статусе, кнопка «Повторить» после трёх неудач подряд.
 
 ## Структура
 
@@ -46,8 +50,9 @@ src/
 │   ├── config.ts         # API_BASE и лимит 50 МБ
 │   ├── types.ts          # типы контракта (snake_case, как у бекенда)
 │   └── client.ts         # createSession/getAnalysisState/getReport/getSteps/getStep/artifactUrl
-├── components/           # TopBar, Layout, Button, иконки
-├── pages/                # ModelPage, UploadPage, AnalysisPage
+├── components/           # TopBar, Layout, Button, StageList, WarningsBox, иконки
+├── hooks/useAnalysisStatus.ts  # опрос статуса анализа
+├── pages/                # ModelPage, UploadPage, AnalysisPage, ReportPage
 ├── styles/tokens.css     # токены дизайна из PDF-макета
 └── utils/format.ts       # размер файла по-человечески
 ```
