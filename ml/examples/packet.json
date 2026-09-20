@@ -1,25 +1,77 @@
 {
-  "schema_version": "1",
+  "schema_version": "2",
   "source_id": "synthetic-example-not-a-real-session",
   "task": "Запусти тесты проекта.",
   "candidates": [
     {
       "candidate_id": "repeated-test-command",
-      "kind": "repeated_failed_tool",
+      "kind": "repeated_tool_call",
       "facts": [
-        "Команда npm test выполнена три раза.",
-        "Все три результата содержат явную ошибку Missing script: test."
+        {
+          "fact_id": "same_calls",
+          "text": "Команда npm test выполнена три раза.",
+          "evidence_step_ids": [
+            "step-1",
+            "step-3",
+            "step-5"
+          ]
+        },
+        {
+          "fact_id": "same_errors",
+          "text": "Все три результата содержат явную ошибку Missing script: test.",
+          "evidence_step_ids": [
+            "step-2",
+            "step-4",
+            "step-6"
+          ]
+        }
       ],
       "evidence": [
-        {"step_id": "step-1", "kind": "tool_call", "text": "npm test", "source_line": 1},
-        {"step_id": "step-2", "kind": "tool_result", "text": "is_error=true; Missing script: test", "source_line": 2},
-        {"step_id": "step-3", "kind": "tool_call", "text": "npm test", "source_line": 3},
-        {"step_id": "step-4", "kind": "tool_result", "text": "is_error=true; Missing script: test", "source_line": 4},
-        {"step_id": "step-5", "kind": "tool_call", "text": "npm test", "source_line": 5},
-        {"step_id": "step-6", "kind": "tool_result", "text": "is_error=true; Missing script: test", "source_line": 6}
+        {
+          "step_id": "step-1",
+          "kind": "tool_call",
+          "text": "npm test",
+          "source_line": 1
+        },
+        {
+          "step_id": "step-2",
+          "kind": "tool_result",
+          "text": "is_error=true; Missing script: test",
+          "source_line": 2
+        },
+        {
+          "step_id": "step-3",
+          "kind": "tool_call",
+          "text": "npm test",
+          "source_line": 3
+        },
+        {
+          "step_id": "step-4",
+          "kind": "tool_result",
+          "text": "is_error=true; Missing script: test",
+          "source_line": 4
+        },
+        {
+          "step_id": "step-5",
+          "kind": "tool_call",
+          "text": "npm test",
+          "source_line": 5
+        },
+        {
+          "step_id": "step-6",
+          "kind": "tool_result",
+          "text": "is_error=true; Missing script: test",
+          "source_line": 6
+        }
       ],
-      "limitations": ["Содержимое package.json не предоставлено; правильная команда тестов неизвестна."]
+      "limitations": [
+        "Содержимое package.json не предоставлено; правильная команда тестов неизвестна."
+      ],
+      "priority": "high",
+      "context_complete": true
     }
   ],
-  "warnings": ["Учебный пример для подключения и тестов, не лог для защиты."]
+  "warnings": [
+    "Учебный пример для подключения и тестов, не лог для защиты."
+  ]
 }

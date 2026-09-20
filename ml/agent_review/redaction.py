@@ -26,7 +26,9 @@ def clean_packet(packet: ReviewInput) -> ReviewInput:
     clean.task = redact(clean.task) if clean.task else None
     clean.warnings = [redact(t) for t in clean.warnings]
     for candidate in clean.candidates:
-        candidate.facts = [redact(t) for t in candidate.facts]
+        candidate.task_context = redact(candidate.task_context) if candidate.task_context else None
+        for fact in candidate.facts:
+            fact.text = redact(fact.text)
         candidate.limitations = [redact(t) for t in candidate.limitations]
         for step in candidate.evidence:
             step.text = redact(step.text)

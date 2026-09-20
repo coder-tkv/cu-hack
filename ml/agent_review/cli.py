@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from zipfile import BadZipFile
 
 from pydantic import ValidationError
 
@@ -62,7 +63,8 @@ def main() -> int:
     except ValidationError as exc:
         print(json.dumps({"error": "invalid_packet", "details": exc.errors(
             include_input=False, include_context=False, include_url=False)}, ensure_ascii=False), file=sys.stderr)
-    except (OSError, ValueError, KeyError) as exc:
+        print("Expected schema_version=2. Re-run prepare for older packets.", file=sys.stderr)
+    except (OSError, ValueError, KeyError, BadZipFile) as exc:
         # Do not print provider responses or log content in CLI errors.
         print(f"Input/configuration error: {type(exc).__name__}: {exc}", file=sys.stderr)
     return 1

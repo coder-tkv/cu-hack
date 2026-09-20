@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cu-agent-review"
-version = "0.1.0"
+version = "0.2.0"
 description = "Small evidence-based LLM reviewer for coding-agent sessions"
 requires-python = ">=3.11"
 dependencies = ["openai==3.6.0", "pydantic==2.13.5"]
