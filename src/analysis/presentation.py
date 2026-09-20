@@ -74,20 +74,34 @@ def decorate(findings: list[dict]) -> None:
         f["evidenceSteps"] = len(f.get("stepIds") or [])
 
 
-def summary(findings: list[dict]) -> dict:
-    """Итог для шапки отчёта. Считает код: никаких оценок, только состав находок."""
+def summary(findings: list[dict], meta: dict | None = None, coverage: list[dict] | None = None) -> dict:
+    """Итог для шапки отчёта. Считает код: никаких оценок, только состав находок.
+
+    «Значимых проблем не найдено» и «разбирать нечего» — разные ответы, и путать
+    их нельзя: нераспознанный формат не должен выглядеть как чистая сессия.
+    """
     bands = {BAND_HIGH: 0, BAND_MEDIUM: 0, BAND_LOW: 0}
     for f in findings:
         if f.get("severityBand") in bands:
             bands[f["severityBand"]] += 1
 
+    meta = meta or {}
+    base = {"total": len(findings), "byBand": bands, "significant": bands[BAND_HIGH] + bands[BAND_MEDIUM]}
+
+    fmt = meta.get("format")
+    if fmt == "empty" or not meta.get("steps"):
+        return {**base, "dataStatus": "insufficient_data",
+                "headline": "В файле нет записей для разбора"}
+    if fmt and fmt != "claude-code":
+        return {**base, "dataStatus": "insufficient_data",
+                "headline": "Формат не распознан: поддерживается JSONL Claude Code"}
+    if coverage and all(d["status"] == "insufficient_data" for d in coverage):
+        return {**base, "dataStatus": "insufficient_data",
+                "headline": "Данных в логе недостаточно для содержательного разбора"}
+
     if not findings:
-        return {
-            "headline": "Значимых проблем не найдено в доступных данных",
-            "total": 0,
-            "byBand": bands,
-            "significant": 0,
-        }
+        return {**base, "dataStatus": "complete",
+                "headline": "Значимых проблем не найдено в доступных данных"}
 
     parts: list[str] = []
     for f in findings:
@@ -100,12 +114,7 @@ def summary(findings: list[dict]) -> dict:
             break
     headline = ("Агент " + " и ".join(parts)) if parts else "Найдены сбои среды, не связанные с поведением агента"
 
-    return {
-        "headline": headline,
-        "total": len(findings),
-        "byBand": bands,
-        "significant": bands[BAND_HIGH] + bands[BAND_MEDIUM],
-    }
+    return {**base, "dataStatus": "complete", "headline": headline}
 
 
 def rule_snippet(recommendation: dict, limit: int = 220) -> str:

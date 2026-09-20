@@ -468,12 +468,26 @@ class TestCardFields(unittest.TestCase):
         self.assertEqual(s["total"], 1)
         self.assertNotIn("Агент", s["headline"], "сбой API — не поведение агента")
 
+    def test_unreadable_input_is_not_a_clean_session(self):
+        """Нераспознанный формат и пустой файл нельзя показывать как «проблем нет»."""
+        cases = {
+            "": "нет записей",
+            '{"event": "tool"}\n{"event": "msg"}': "Формат не распознан",
+            '{"type":"assis': "нет записей",
+        }
+        for log, expected in cases.items():
+            s = analyze_log(log)["summary"]
+            self.assertEqual(s["dataStatus"], "insufficient_data", repr(log[:20]))
+            self.assertNotIn("не найдено", s["headline"], repr(log[:20]))
+            self.assertIn(expected.split()[0], s["headline"], repr(log[:20]))
+
     def test_summary_when_nothing_found(self):
         log = "\n".join([human_line("прочитай файл", 0),
                          call_line("Read", {"file_path": "/p/a.ts"}, "c0", 1),
                          result_line("c0", "export const a = 1", 2)])
         s = analyze_log(log)["summary"]
         self.assertEqual(s["total"], 0)
+        self.assertEqual(s["dataStatus"], "complete", "данные есть, просто проблем нет")
         self.assertIn("не найдено", s["headline"])
 
     def test_rule_snippet_fits_the_card(self):

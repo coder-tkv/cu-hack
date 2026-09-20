@@ -28,15 +28,16 @@ def _finish(parsed: dict) -> dict:
     # Рекомендации собирает код: если LLM-этап недоступен, отчёт всё равно
     # отвечает на «что поменять к следующей сессии».
     recommendations = build_recommendations(findings)
+    coverage = build_coverage(steps, findings, warnings)
     decorate(findings)  # категория карточки, источник объяснения, число доказательств
     for r in recommendations:
         r["ruleSnippet"] = rule_snippet(r)
     return {
         "meta": meta,
-        "summary": summary(findings),
+        "summary": summary(findings, meta, coverage),
         "kpi": compute_kpi(steps),
         "census": census(steps),
-        "coverage": build_coverage(steps, findings, warnings),
+        "coverage": coverage,
         "findings": findings,
         "recommendations": recommendations,
         "artifacts": {"CLAUDE.generated.md": build_claude_md(recommendations, meta)},
