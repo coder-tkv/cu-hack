@@ -99,9 +99,11 @@ def detect_failures(steps: list[dict]) -> list[dict]:
             )
         )
 
-    # (3) общий фон: доля падений
-    if len(calls) >= 10 and len(failed) >= 4:
-        rate = len(failed) / len(calls)
+    # (3) общий фон: доля падений считается только по вызовам с известным статусом
+    known = [c for c in calls if result_by_call.get(c["id"]) is not None]
+    unknown_status = len(calls) - len(known)
+    if len(known) >= 10 and len(failed) >= 4:
+        rate = len(failed) / len(known)
         if rate >= 0.15:
             out.append(
                 finding(
@@ -109,10 +111,15 @@ def detect_failures(steps: list[dict]) -> list[dict]:
                     severity=min(0.7, 0.3 + rate),
                     title=(
                         f"Каждый {round(1 / rate)}-й вызов инструмента завершался ошибкой "
-                        f"({len(failed)} из {len(calls)})"
+                        f"({len(failed)} из {len(known)} с известным статусом)"
                     ),
                     step_ids=[i for f in failed[:12] for i in (f["call"]["id"], f["result"]["id"])],
-                    metrics={"failures": len(failed), "calls": len(calls), "rate": round(rate, 3)},
+                    metrics={
+                        "failures": len(failed),
+                        "calls": len(known),
+                        "unknownStatusCount": unknown_status,
+                        "rate": round(rate, 3),
+                    },
                     evidence={
                         "byTool": dict(Counter(f["call"].get("tool") or "?" for f in failed)),
                         "topErrors": [
@@ -122,7 +129,8 @@ def detect_failures(steps: list[dict]) -> list[dict]:
                     },
                     explanation=(
                         "Высокая доля неудачных вызовов: значительная часть работы уходила "
-                        "на исправление собственных попыток."
+                        "на исправление собственных попыток. Вызовы без результата в знаменатель "
+                        "не попали — их статус неизвестен."
                     ),
                 )
             )

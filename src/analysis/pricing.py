@@ -1,7 +1,9 @@
 """Цены моделей, $ за 1M токенов. Нужны только для оценки стоимости в KPI.
 
-Источник — прайс Anthropic API. Cache read = 0.1x входа, cache write = 1.25x входа
-(стандартный TTL). Неизвестная модель -> None: цену не выдумываем, показываем "нет данных".
+Источник — прайс Anthropic API. Cache read = 0.1x входа. Запись в кэш зависит от TTL:
+пятиминутный — 1.25x входа, часовой — 2x. В настоящих логах Claude Code почти вся
+запись идёт в часовой кэш (99.9% объёма), поэтому разница в счёте заметная.
+Неизвестная модель -> None: цену не выдумываем, показываем "нет данных".
 """
 
 from __future__ import annotations
@@ -19,6 +21,8 @@ _BASE = {
     "claude-sonnet-4-6": (3.0, 15.0),
     "claude-haiku-4-5": (1.0, 5.0),
 }
+# Служебные сообщения Claude Code: обращения к API нет, токенов нет, цена нулевая.
+_FREE_MODELS = {"<synthetic>"}
 # исключения по цене чтения кэша
 _CACHE_READ_OVERRIDE = {"claude-fable-5-1": 0.25, "claude-mythos-5-1": 0.25}
 
@@ -27,6 +31,9 @@ def rates(model: str | None) -> dict | None:
     """$/MTok для модели: {"in","out","cacheRead","cacheWrite"} или None."""
     if not isinstance(model, str):
         return None
+    if model in _FREE_MODELS:
+        return {"in": 0.0, "out": 0.0, "cacheRead": 0.0, "cacheWrite": 0.0,
+                "cacheWrite5m": 0.0, "cacheWrite1h": 0.0}
     key = model
     if key not in _BASE:
         # версии с датой в конце и префиксы провайдеров: berrock/vertex
@@ -42,7 +49,9 @@ def rates(model: str | None) -> dict | None:
         "in": inp,
         "out": out,
         "cacheRead": _CACHE_READ_OVERRIDE.get(key, inp * 0.1),
-        "cacheWrite": inp * 1.25,
+        "cacheWrite": inp * 1.25,  # пятиминутный TTL
+        "cacheWrite5m": inp * 1.25,
+        "cacheWrite1h": inp * 2.0,
     }
 
 
@@ -63,9 +72,12 @@ def step_cost(step: dict) -> float | None:
     r = rates(step.get("model"))
     if r is None:
         return None
+    w1h = u.get("cacheWrite1h", 0)
+    w5 = u.get("cacheWrite5m", u.get("cacheWrite", 0) - w1h)
     return (
         u.get("in", 0) * r["in"]
         + u.get("out", 0) * r["out"]
         + u.get("cacheRead", 0) * r["cacheRead"]
-        + u.get("cacheWrite", 0) * r["cacheWrite"]
+        + max(0, w5) * r["cacheWrite5m"]
+        + w1h * r["cacheWrite1h"]
     ) / 1_000_000

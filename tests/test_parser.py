@@ -207,3 +207,66 @@ class TestParser(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestUsageAndPricing(unittest.TestCase):
+    """Запись в кэш бывает пятиминутной и часовой, и стоит по-разному.
+    В настоящих логах Claude Code почти вся запись — часовая."""
+
+    def _usage(self, cc: dict | None, total: int):
+        row = {
+            "type": "assistant",
+            "timestamp": "2026-09-20T10:00:00.000Z",
+            "message": {
+                "id": "m1", "role": "assistant", "model": "claude-opus-5",
+                "content": [{"type": "text", "text": "x"}],
+                "usage": {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0,
+                          "cache_creation_input_tokens": total},
+            },
+        }
+        if cc is not None:
+            row["message"]["usage"]["cache_creation"] = cc
+        return parse_log(L(row))["steps"][0]["usage"]
+
+    def test_ttl_breakdown_parsed(self):
+        u = self._usage({"ephemeral_1h_input_tokens": 900, "ephemeral_5m_input_tokens": 100}, 1000)
+        self.assertEqual((u["cacheWrite"], u["cacheWrite1h"], u["cacheWrite5m"]), (1000, 900, 100))
+
+    def test_without_breakdown_counted_as_5m(self):
+        u = self._usage(None, 1000)
+        self.assertEqual((u["cacheWrite"], u["cacheWrite1h"], u["cacheWrite5m"]), (1000, 0, 1000))
+
+    def test_hour_cache_costs_more(self):
+        from analysis.pricing import step_cost
+
+        hour = {"model": "claude-opus-5", "usage": self._usage({"ephemeral_1h_input_tokens": 1_000_000, "ephemeral_5m_input_tokens": 0}, 1_000_000)}
+        five = {"model": "claude-opus-5", "usage": self._usage({"ephemeral_1h_input_tokens": 0, "ephemeral_5m_input_tokens": 1_000_000}, 1_000_000)}
+        self.assertAlmostEqual(step_cost(hour), 10.0, places=4)   # 2x от $5 за MTok
+        self.assertAlmostEqual(step_cost(five), 6.25, places=4)   # 1.25x
+        self.assertGreater(step_cost(hour), step_cost(five))
+
+    def test_unknown_model_has_no_cost(self):
+        from analysis.pricing import step_cost
+
+        self.assertIsNone(step_cost({"model": "какая-то-новая", "usage": {"in": 100, "out": 100}}))
+        self.assertIsNone(step_cost({"model": None, "usage": {"in": 100}}))
+
+    def test_dated_and_provider_prefixed_model_ids(self):
+        """Один и тот же ID приходит в разных обёртках: префикс провайдера, суффикс даты."""
+        from analysis.pricing import rates
+
+        base = rates("claude-sonnet-5")
+        self.assertIsNotNone(base)
+        self.assertEqual(rates("anthropic.claude-sonnet-5"), base)
+        self.assertEqual(rates("claude-sonnet-5@20260101"), base)
+        self.assertEqual(rates("claude-sonnet-5-20260101"), base)
+
+    def test_model_outside_price_table_is_honest_about_it(self):
+        """Модель, которой нет в таблице (старая или новая), не должна получать
+        выдуманную цену — только «нет данных»."""
+        from analysis.pricing import rates
+
+        self.assertIsNone(rates("claude-opus-4-5"))
+        self.assertIsNone(rates("claude-3-5-sonnet-20241022"))
+        self.assertIsNone(rates(""))
+        self.assertIsNone(rates(None))

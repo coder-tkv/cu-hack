@@ -7,6 +7,7 @@ run_all(steps) -> findings[], отсортированные по значимо
 
 from __future__ import annotations
 
+from ..severity import classify, sort_key
 from .edits import detect_edit_churn
 from .failures import detect_failures
 from .human import detect_human_interventions
@@ -66,9 +67,14 @@ def run_all(steps: list[dict]) -> tuple[list[dict], list[str]]:
                 warnings.append(f"находка {f.get('type')} отброшена: нет валидных ссылок на шаги")
                 continue
             f["detector"] = name
+            band = classify(f)
+            f["severityBand"] = band["band"]
+            f["severityRules"] = band["rules"]
+            f["evidenceStrength"] = band["evidenceStrength"]
+            f["informational"] = band["informational"]
             findings.append(f)
 
-    findings.sort(key=lambda f: (-f["severity"], f["stepIds"][0]))
+    findings.sort(key=sort_key)
     for i, f in enumerate(findings, start=1):
         f["id"] = f"f{i}"
     return findings, warnings

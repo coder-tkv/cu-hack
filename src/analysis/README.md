@@ -13,16 +13,55 @@ report = analyze_file(path)           # построчное чтение, ло�
 {
   "meta": {"format": "claude-code", "steps": 812, "lines": 800, "badJson": 0,
            "cwd": "...", "models": [...], "warnings": ["12 строк пропущено"]},
-  "kpi":  {"tokensIn": 0, "tokensOut": 0, "cacheRead": 0, "cacheWrite": 0,
+  "kpi":  {"tokensIn": 0, "tokensOut": 0, "cacheRead": 0, "cacheWrite": 0, "cacheWrite1h": 0,
            "cost": 12.34, "costPartial": False, "durationMin": 73, "spanMin": 400,
-           "toolCalls": 195, "failures": 9, "humanMessages": 5, "interruptions": 2},
-  "findings": [{"id": "f1", "type": "repeated_call", "severity": 0.87, "title": "…",
-                "stepIds": [120, 124, 131], "evidence": {...}, "metrics": {...},
-                "explanation": "…", "source": "code", "detector": "repeated"}],
-  "recommendations": [],   # заполняет LLM-этап
+           "toolCalls": 195, "failures": 9, "callsWithKnownStatus": 195,
+           "unknownStatusCount": 0, "errorRate": 0.046, "fileEdits": 67,
+           "humanMessages": 5, "interruptions": 2},
+  "census": {...},          # один пересчёт лога, общий для KPI и покрытия
+  "coverage": [             # явный результат по каждому из шести направлений
+    {"direction": "repeats", "title": "Повторяющиеся вызовы инструментов",
+     "status": "found|clean|insufficient_data", "findings": 6,
+     "findingIds": ["f1"], "checked": {"toolCalls": 275},
+     "note": "проверено 275 вызовов инструментов"}],
+  "findings": [{"id": "f1", "type": "repeated_call",
+                "severityBand": "высокая", "severity": 0.87,
+                "severityRules": ["вызов повторён 4 раза", "…"],
+                "evidenceStrength": "direct", "informational": False,
+                "title": "…", "stepIds": [120, 124, 131],
+                "evidence": {...}, "metrics": {...}, "explanation": "…",
+                "recommendationId": "r1", "source": "code", "detector": "repeated"}],
+  "recommendations": [{"id": "r1", "findingId": "f1", "findingIds": ["f1", "f4"],
+                       "artifactType": "claude_md_patch|rule|skill",
+                       "filename": "CLAUDE.md", "title": "…", "action": "…",
+                       "rationale": "…", "verify": "…", "content": "…",
+                       "examples": [{"findingId": "f1", "stepIds": [120], "detail": "npm test"}],
+                       "source": "code"}],
+  "artifacts": {"CLAUDE.generated.md": "…"},
   "steps": [...]
 }
 ```
+
+### Полосы значимости, а не одно число
+
+`severityBand` — `высокая | средняя | низкая`, определяется правилами (см. `severity.py`),
+а `severity` нужна только для сортировки внутри полосы. Так требует документ архитектуры:
+число вроде `confidence=0.93` нельзя выдавать за измеренную вероятность. `severityRules`
+показывает человеку, почему находка попала в свою полосу. `informational: true` — находка
+справочная (пауза, дорогой участок, сбой API): она ничего не доказывает сама по себе.
+
+### Рекомендации собирает код
+
+Одна рекомендация на тип находки: действие, основание, способ проверки пользы и **готовый
+текст файла**. Три формата, которые называет кейс: патч `CLAUDE.md`, правило для разбора,
+черновик скилла (`.claude/skills/project-commands/SKILL.md`). Каждая привязана к конкретным
+находкам через `findingIds` и цитирует лог в `examples` — общих советов не выдаём.
+LLM-этап может переписать формулировки, но если он недоступен, рекомендации в отчёте уже есть.
+
+### Доля ошибок с честным знаменателем
+
+Вызов без результата — это `unknown`, а не успех: `errorRate = падения / вызовы с известным
+статусом`, при нулевом знаменателе `None`, а не `0`. `unknownStatusCount` показывается рядом.
 
 ## Что считает код
 
@@ -68,10 +107,11 @@ report = analyze_file(path)           # построчное чтение, ло�
 ## Проверка
 
 ```bash
-python3 -m unittest discover -s tests -q          # 87 тестов
+python3 -m unittest discover -s tests -q          # 113 тестов
 python3 -m analysis.cli ~/.claude/projects/<проект>/<uuid>.jsonl --top 10
 ```
 
+| `tests/test_report.py` | покрытие шести направлений, полосы значимости, привязка рекомендаций к находкам, знаменатель доли ошибок |
 | файл | что проверяет |
 |---|---|
 | `tests/test_parser.py` | порченые логи: пустой, оборванный, не-объекты в строках, неизвестные типы, отсутствующие поля, дедупликация usage |
