@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Секреты и локальные настройки
+.env
+src/.env
+*.env.local
+
+# Данные рантайма: загруженные логи и сгенерированные отчёты
+src/data/
+data/
+
+# Окружение разработчика
+.idea/
+.vscode/
+.DS_Store
+
+# Node
+node_modules/
+dist/
